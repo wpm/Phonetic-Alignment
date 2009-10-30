@@ -1,6 +1,29 @@
 require "helper"
 
 
+$segments =<<-EOTEXT
+FORM, VOWEL, NASAL, VOICED
+dʒ,-,-,+
+m,-,+,-
+ŋ,-,+,+
+p,-,-,-
+s,-,-,-
+z,-,-,+
+i,+,-,+
+ʌ,+,-,+
+EOTEXT
+
+$words =<<-EOTEXT
+FORM, LEMMA, PERNUM, ASPECT
+dʒʌmp,jump, non-3sg, perfect
+dʒʌmps,jump, 3sg, perfect
+dʒʌmpiŋ,jump,, imperfect
+si,see, non-3sg, perfect
+siz,see, 3sg, perfect
+siiŋ,see,, imperfect
+EOTEXT
+
+
 class FeatureValueMatrixTestCase < Test::Unit::TestCase
   context "A FeatureValueMatrix" do
     setup do
@@ -113,6 +136,13 @@ class PhoneTestCase < Test::Unit::TestCase
             PhoneticAlign::FeatureValueMatrix[:f1 => :v1, :f2 => :v3])
     end
 
+    should "Equal another phone with the same IPA and features" do
+      features = PhoneticAlign::FeatureValueMatrix[:f1 => :v1, :f2 => :v2]
+      p1 = PhoneticAlign::Phone.new("p", features)
+      p2 = PhoneticAlign::Phone.new("p", features)
+      assert(p1 == p2, "#{p1} != #{p2}")
+    end
+
     should "handle unicode IPA characters" do
       assert_equal("dʒ", @j.ipa)
       assert_equal(2, @j.ipa.jlength)
@@ -167,6 +197,12 @@ class Morpheme < Test::Unit::TestCase
       assert_equal("s: [NUMBER = plural]", @s.to_s)
       assert_equal("s/z: [NUMBER = plural]", @sz.to_s)
       assert_equal("ed: [TENSE = past]", @ed.to_s)
+    end
+
+    should "have a transcription without the feature matrix" do
+      assert_equal("s", @s.transcription)
+      assert_equal("s/z", @sz.transcription)
+      assert_equal("ed", @ed.transcription)
     end
 
     should "Accept either a list or a set of allophones in its constructor" do
@@ -242,5 +278,138 @@ class Word < Test::Unit::TestCase
       assert_equal("[cat][s/z]: [LEMMA = cat, NUMBER = plural]", w.to_s)
     end
 
+    should "have a transcription without the meaning matrix" do
+      w = PhoneticAlign::Word.new([@c, @a, @t, @s], @cats_meaning)
+      assert_equal("cats", w.transcription)
+      w = PhoneticAlign::Word.new([@cat_morph, @s], @cats_meaning)
+      assert_equal("[cat]s", w.transcription)
+      w = PhoneticAlign::Word.new([@cat_morph, @s_morph], @cats_meaning)
+      assert_equal("[cat][s]", w.transcription)
+      z = PhoneticAlign::Phone.new("z")
+      sz_morph = PhoneticAlign::Morpheme.new([[@s], [z]], @number_plural)
+      w = PhoneticAlign::Word.new([@cat_morph, sz_morph], @cats_meaning)
+      assert_equal("[cat][s/z]", w.transcription)
+    end
+
   end
+end
+
+
+class FormFeatureReaderTestCase < Test::Unit::TestCase
+  context "A Form-feature reader" do
+
+    should "read in a feature chart containing Unicode IPA symbols" do
+      expected = [
+          ["dʒ", {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "+"}],
+          ["m",  {"VOWEL" => "-", "NASAL" => "+", "VOICED" => "-"}],
+          ["ŋ",  {"VOWEL" => "-", "NASAL" => "+", "VOICED" => "+"}],
+          ["p",  {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "-"}],
+          ["s",  {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "-"}],
+          ["z",  {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "+"}],
+          ["i",  {"VOWEL" => "+", "NASAL" => "-", "VOICED" => "+"}],
+          ["ʌ",  {"VOWEL" => "+", "NASAL" => "-", "VOICED" => "+"}]
+        ]
+      assert_equal(expected, PhoneticAlign::FormFeatureReader.new($segments).collect)
+    end
+  end
+end
+
+
+class PhoneTable < Test::Unit::TestCase
+  context "A PhoneTable" do
+    setup do""
+      @phones = PhoneticAlign::PhoneTable.new($segments)
+    end
+
+    should "read in a feature chart containing Unicode IPA symbols" do
+      expected = {
+          "dʒ" => PhoneticAlign::Phone.new("dʒ",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym]),
+          "m" => PhoneticAlign::Phone.new("m",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "+".to_sym, :VOICED => "-".to_sym]),
+          "ŋ" => PhoneticAlign::Phone.new("ŋ",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "+".to_sym, :VOICED => "+".to_sym]),
+          "p" => PhoneticAlign::Phone.new("p",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "-".to_sym]),
+          "s" => PhoneticAlign::Phone.new("s",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "-".to_sym]),
+          "z" => PhoneticAlign::Phone.new("z",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym]),
+          "i" => PhoneticAlign::Phone.new("i",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "+".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym]),
+          "ʌ" => PhoneticAlign::Phone.new("ʌ",
+                  PhoneticAlign::FeatureValueMatrix[:VOWEL => "+".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym])
+        }
+      assert_equal(expected, @phones)
+    end
+
+    should "segment a string of unigraphs by character" do
+      assert_equal([@phones["s"], @phones["i"], @phones["m"], @phones["i"], @phones["ŋ"]], @phones.phone_sequence("simiŋ"))
+    end
+
+    should "segment a string containing digraphs" do
+      assert_equal([@phones["dʒ"], @phones["ʌ"], @phones["m"], @phones["p"]], @phones.phone_sequence("dʒʌmp"))
+    end
+
+    should "raise an exception for an unrecognized character" do
+      assert_raise(ArgumentError) { @phones.phone_sequence("six") }
+    end
+  
+    should "have a short stringification with the number of phones" do
+      assert_equal("PhoneTable: 8 segments", @phones.inspect)
+    end
+  end
+
+end
+
+
+class WordList < Test::Unit::TestCase
+
+  context "A Word list" do
+
+    should "be creatable from a word list and segment table" do
+      word_list = PhoneticAlign::WordList.new($words, $segments)
+      transcriptions = ["dʒʌmp", "dʒʌmps", "dʒʌmpiŋ", "si", "siz", "siiŋ"]
+      assert_equal(transcriptions, word_list.collect { |w| w.transcription })
+      # jump is the first word in the list
+      jump = word_list.first
+      # Verify the semantic features of jump
+      assert_equal({"LEMMA" => "jump", "PERNUM" => "non-3sg", "ASPECT" => "perfect"}, jump.meaning)
+      # Verify segments on jump
+      assert_equal(["dʒ", "ʌ", "m", "p"], jump.phonetic_component.collect { |p| p.ipa })
+      # Verify the phonetic featuers of the first segment in jump
+      assert_equal({:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}, jump.phonetic_component.first.features)
+    end
+
+    should "be creatable from a word list without a segment table" do
+      word_list = PhoneticAlign::WordList.new($words)
+      transcriptions = ["dʒʌmp", "dʒʌmps", "dʒʌmpiŋ", "si", "siz", "siiŋ"]
+      assert_equal(transcriptions, word_list.collect { |w| w.transcription })
+      djump = word_list.first
+      assert_equal({"LEMMA" => "jump", "PERNUM" => "non-3sg", "ASPECT" => "perfect"}, djump.meaning)
+      djump_form = "dʒʌmp".split("").collect { |f| PhoneticAlign::Phone.new(f, {}) }
+      assert_equal(djump_form, djump.phonetic_component)
+    end
+
+    should "raise a RuntimeError if either of its intialization tables does not contain a FORM column" do
+      no_form_data = "COL A, COL B\na,b"
+      assert_raise(RuntimeError) { PhoneticAlign::WordList.new(no_form_data) }
+      assert_raise(RuntimeError) { PhoneticAlign::WordList.new($words, no_form_data) }
+    end
+
+    should "raise an ArgumentError if a word contains a segment not in the segment table" do
+      bad_segment_data = "FORM, LEMMA, PERNUM, ASPECT\ndʒʌXp,jump, non-3sg, perfect"
+      assert_raise(ArgumentError) { PhoneticAlign::WordList.new($words, bad_segment_data) }
+    end
+
+    should "ignore missing final fields in a line of the table" do
+      short_line = "FORM, LEMMA\ndʒump"
+      w = PhoneticAlign::WordList.new(short_line)
+      assert_equal(1, w.length)
+      assert_instance_of(PhoneticAlign::Word, w.first)
+      assert_equal({}, w.first.meaning)
+    end
+
+  end
+
 end
