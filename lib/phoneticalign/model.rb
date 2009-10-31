@@ -119,7 +119,7 @@ module PhoneticAlign
 
     # Two morphemes are compatible if they have the same meaning and the
     # allophones of one are a subset of the allophones of the other.
-    def compatible?(other)
+    def is_compatible?(other)
       meaning == other.meaning and
       (allophones.subset?(other.allophones) or other.allophones.subset?(allophones))
     end
@@ -160,6 +160,10 @@ module PhoneticAlign
       "#{transcription}: #{meaning}"
     end
 
+    def inspect
+      to_s
+    end
+
     # Phone and morpheme transcription of the word.
     #
     # Morphemes are set off in square brackets.  Multiple allophones are
@@ -177,10 +181,13 @@ module PhoneticAlign
       end.join
     end
 
-    def inspect
-      to_s
+    # A Word is fully-analyzed if its phonetic component consists entirely of
+    # morphemes.
+    def fully_analyzed?
+      phonetic_component.all? { |p| p.is_a?(Morpheme) }
     end
 
   end
+
 
 end

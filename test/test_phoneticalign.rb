@@ -24,6 +24,23 @@ siiŋ,see,, imperfect
 EOTEXT
 
 
+class ArrayTestCase < Test::Unit::TestCase
+  context "An array" do
+    
+    should "support enumeration over symmetric pairs of items" do
+      pairs = []
+      [1, 2, 3, 4].each_symmetric_pair {|p| pairs << p}
+      assert_equal([[2, 1], [3, 1], [3, 2], [4, 1], [4, 2], [4, 3]], pairs.sort)
+      # Empty list.
+      pairs = []
+      [].each_symmetric_pair {|p| pairs << p}
+      assert_equal([], pairs)
+    end
+    
+  end
+end
+
+
 class FeatureValueMatrixTestCase < Test::Unit::TestCase
   context "A FeatureValueMatrix" do
     setup do
@@ -215,19 +232,19 @@ class Morpheme < Test::Unit::TestCase
 
   context "A pair of Morphemes" do
     should "be compatible if they have the same meanings and one's allophone set subsumes the other's" do
-      assert(@s.compatible?(@s))
-      assert(@s.compatible?(@sz))
+      assert(@s.is_compatible?(@s))
+      assert(@s.is_compatible?(@sz))
     end
 
     should "not be compatible if they have the same meaning but non-intersecting allophone sets" do
-      assert(!@s.compatible?(@z))
+      assert(!@s.is_compatible?(@z))
     end
 
     should "not be compatible if they have different meanings" do
-      assert(!@s.compatible?(@ed))
-      assert(!@z.compatible?(@ed))
-      assert(!@sz.compatible?(@ed))
-      assert(!@ed.compatible?(@s))
+      assert(!@s.is_compatible?(@ed))
+      assert(!@z.is_compatible?(@ed))
+      assert(!@sz.is_compatible?(@ed))
+      assert(!@ed.is_compatible?(@s))
     end
   end
 end
@@ -265,6 +282,15 @@ class Word < Test::Unit::TestCase
       assert_equal(@cats_meaning, all_morphs.meaning)
     end
 
+    should "be fully-analyzed if its phonetic component consists entirely of morphemes" do
+      all_phones = PhoneticAlign::Word.new([@c, @a, @t, @s], @cats_meaning)
+      assert(!all_phones.fully_analyzed?)
+      phone_and_morphs = PhoneticAlign::Word.new([@cat_morph, @s], @cats_meaning)
+      assert(!phone_and_morphs.fully_analyzed?)
+      all_morphs = PhoneticAlign::Word.new([@cat_morph, @s_morph], @cats_meaning)
+      assert(all_morphs.fully_analyzed?)
+    end
+
     should "stringify as a bracketed transcription followed by a meaning" do
       w = PhoneticAlign::Word.new([@c, @a, @t, @s], @cats_meaning)
       assert_equal("cats: [LEMMA = cat, NUMBER = plural]", w.to_s)
@@ -296,6 +322,7 @@ end
 
 
 class FormFeatureReaderTestCase < Test::Unit::TestCase
+
   context "A Form-feature reader" do
 
     should "read in a feature chart containing Unicode IPA symbols" do
@@ -311,13 +338,15 @@ class FormFeatureReaderTestCase < Test::Unit::TestCase
         ]
       assert_equal(expected, PhoneticAlign::FormFeatureReader.new($segments).collect)
     end
+
   end
+
 end
 
 
 class PhoneTable < Test::Unit::TestCase
   context "A PhoneTable" do
-    setup do""
+    setup do
       @phones = PhoneticAlign::PhoneTable.new($segments)
     end
 
