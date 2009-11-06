@@ -1,0 +1,38 @@
+# From "Source Book for Linguistics" by William Cowan and Jaromira Rakusan (1985)
+
+FORM,LEMMA,NUMBER,DISTANCE
+
+amisk, beaver, singular, proximate
+amiskwak, beaver, plural, proximate
+amiskwa, beaver, singular, obviate
+
+asa:m, snowshoe, singular, proximate
+asa:mak, snowshoe, plural, proximate
+
+astis, mitten, singular, proximate
+astisak, mitten, plural, proximate
+
+atim, dog, singular, proximate
+atim, dog, plural, proximate
+atimwa, dog, singular, obviate
+
+ayo:skan, raspberry, singular, proximate
+ayo:skanak, raspberry, plural, proximate
+
+mi:kis, bead, singular, proximate
+mi:kisak, bead, plural, proximate
+mi:kisa, bead, singular, obviate
+
+moos, moose, singular, proximate
+mooswak, moose, plural, proximate
+mooswa, moose, singular, obviate
+
+mostos, buffalo, singular, proximate
+mostoswak, buffalo, plural, proximate
+
+pi:sim, sun, singular, proximate
+pi:simwak, sun, plural, proximate
+
+si:si:p, duck, singular, proximate
+si:si:pak, duck, plural, proximate
+si:si:pa, duck, singular, obviate
