@@ -85,8 +85,16 @@ module PhoneticAlign
     end
 
     # The IPA chracter followed by the feature matrix
-    def to_s
-      "#{ipa}: #{features}"
+    #
+    # [<em>ipa_field_width</em>] optional field width for the IPA character;
+    #                            if unspecified the character length is used
+    #
+    # The <em>ipa_field_width</em> is used by PhoneTable to keep the IPA
+    # characters in a table aligned.
+    def to_s(ipa_field_width = nil)
+      ipa_s = ipa_field_width.nil? ?
+              ipa : sprintf("%-#{ipa_field_width}s", ipa)
+      "#{ipa_s} #{features}"
     end
     
     def inspect

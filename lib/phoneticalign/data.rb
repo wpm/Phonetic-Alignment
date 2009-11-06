@@ -37,6 +37,8 @@ module PhoneticAlign
 
 
   # A table of phonological segments indexed by IPA character.
+  #
+  # IPA characters, features, and values are all stored as Ruby symbols.
   class PhoneTable < Hash
     # Create the table from comma-separated value data.
     #
@@ -48,7 +50,7 @@ module PhoneticAlign
         # Convert strings to symbols.
         features = {}
         raw_features.each {|f,v| features[f.to_sym] = v.to_sym}
-        self[form] = Phone.new(form, FeatureValueMatrix.from_hash(features))
+        self[form] = Phone.new(form.to_sym, FeatureValueMatrix.from_hash(features))
       end
       # Create a regular expression used in phonological_sequence.  The IPA
       # keys are sorted by length so that multi-character segments are matched
@@ -58,9 +60,13 @@ module PhoneticAlign
       @seg_regex = Regexp.compile(segs.join("|"))
     end
 
-    # The segment table sorted by IPA character.
+    # The phone table sorted by IPA character.
     def to_s
-      values.sort_by  { |s| s.form }.join("\n")
+      # Set the width of the IPA column equal to the longest graph.
+      longest = values.map { |p| p.ipa.to_s.jlength }.max
+      values.sort_by  { |p| p.ipa.to_s }.map do |p|
+        p.to_s(longest)
+      end.join("\n")
     end
 
     # The class name and the number of segments in the table.

@@ -177,13 +177,17 @@ class PhoneTestCase < Test::Unit::TestCase
     end
 
     should "stringify on a single line with the IPA character followed by the features" do
-      assert_equal("dʒ: [f1 = v1, f2 = v2]", @j.to_s)
+      assert_equal("dʒ [f1 = v1, f2 = v2]", @j.to_s)
+    end
+
+    should "stringify with an optional IPA field width" do
+      assert_equal("dʒ   [f1 = v1, f2 = v2]", @j.to_s(5))
     end
   end
 end
 
 
-class Morpheme < Test::Unit::TestCase
+class MorphemeTestCase < Test::Unit::TestCase
   def setup
     @phone_e = PhoneticAlign::Phone.new("e")
     @phone_d = PhoneticAlign::Phone.new("d")
@@ -250,7 +254,7 @@ class Morpheme < Test::Unit::TestCase
 end
 
 
-class Word < Test::Unit::TestCase
+class WordTestCase < Test::Unit::TestCase
   context "A Word" do
     setup do
       @c = PhoneticAlign::Phone.new("c")
@@ -344,7 +348,7 @@ class FormFeatureReaderTestCase < Test::Unit::TestCase
 end
 
 
-class PhoneTable < Test::Unit::TestCase
+class PhoneTableTestCase < Test::Unit::TestCase
   context "A PhoneTable" do
     setup do
       @phones = PhoneticAlign::PhoneTable.new($segments)
@@ -384,6 +388,23 @@ class PhoneTable < Test::Unit::TestCase
       assert_raise(ArgumentError) { @phones.phone_sequence("six") }
     end
   
+    should "have a long stringification that prints the table in IPA order" do
+      expected =<<-EOTEXT
+dʒ [NASAL = -, VOICED = +, VOWEL = -]
+i  [NASAL = -, VOICED = +, VOWEL = +]
+m  [NASAL = +, VOICED = -, VOWEL = -]
+p  [NASAL = -, VOICED = -, VOWEL = -]
+s  [NASAL = -, VOICED = -, VOWEL = -]
+z  [NASAL = -, VOICED = +, VOWEL = -]
+ŋ [NASAL = +, VOICED = +, VOWEL = -]
+ʌ [NASAL = -, VOICED = +, VOWEL = +]
+EOTEXT
+      # The fact that ŋ and ʌ appears to be a bug with the way sprintf
+      # handles these characters.
+      expected.strip!
+      assert_equal(expected, @phones.to_s, "#{expected.to_s}\nexpected but was\n#{@phones.to_s}")
+    end
+  
     should "have a short stringification with the number of phones" do
       assert_equal("PhoneTable: 8 segments", @phones.inspect)
     end
@@ -392,7 +413,7 @@ class PhoneTable < Test::Unit::TestCase
 end
 
 
-class WordList < Test::Unit::TestCase
+class WordListTestCase < Test::Unit::TestCase
 
   context "A Word list" do
 
@@ -405,7 +426,7 @@ class WordList < Test::Unit::TestCase
       # Verify the semantic features of jump
       assert_equal({"LEMMA" => "jump", "PERNUM" => "non-3sg", "ASPECT" => "perfect"}, jump.meaning)
       # Verify segments on jump
-      assert_equal(["dʒ", "ʌ", "m", "p"], jump.phonetic_component.collect { |p| p.ipa })
+      assert_equal([:dʒ, :ʌ, :m, :p], jump.phonetic_component.collect { |p| p.ipa })
       # Verify the phonetic featuers of the first segment in jump
       assert_equal({:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}, jump.phonetic_component.first.features)
     end
