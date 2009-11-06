@@ -36,25 +36,25 @@ module PhoneticAlign
   end
 
 
-  # A table of phonological segments indexed by IPA character.
+  # A table of phones indexed by IPA character.
   #
   # IPA characters, features, and values are all stored as Ruby symbols.
   class PhoneTable < Hash
     # Create the table from comma-separated value data.
     #
-    # [<em>segment_data</em>] segment table CSV string
+    # [<em>phone_data</em>] phone table CSV string
     #
     # Feature and value strings in the CSV file are converted to symbols.
-    def initialize(segment_data = "")
-      FormFeatureReader.new(segment_data).each do |form, raw_features|
+    def initialize(phone_data = "")
+      FormFeatureReader.new(phone_data).each do |form, raw_features|
         # Convert strings to symbols.
         features = {}
         raw_features.each {|f,v| features[f.to_sym] = v.to_sym}
         self[form] = Phone.new(form.to_sym, FeatureValueMatrix.from_hash(features))
       end
       # Create a regular expression used in phonological_sequence.  The IPA
-      # keys are sorted by length so that multi-character segments are matched
-      # first.  The '.' at the end matches segments not listed in the table,
+      # keys are sorted by length so that multi-character phones are matched
+      # first.  The '.' at the end matches phones not listed in the table,
       # which will cause phone_sequence to raise an ArgumentError.
       segs = keys.sort_by {|s| -s.jlength} + ['.']
       @seg_regex = Regexp.compile(segs.join("|"))
@@ -69,13 +69,13 @@ module PhoneticAlign
       end.join("\n")
     end
 
-    # The class name and the number of segments in the table.
+    # The class name and the number of phones in the table.
     def inspect
-      "PhoneTable: #{length} segments"
+      "PhoneTable: #{length} phones"
     end
 
     # Parse a phonological transcription string into a sequence of strings
-    # that match the phonological segments listed in this table.
+    # that match the phones listed in this table.
     #
     # [_s_] A phonological transcription string
     def phone_sequence(s)
@@ -85,7 +85,7 @@ module PhoneticAlign
           phones << fetch(seg)
         rescue IndexError
           raise ArgumentError.new("/#{seg}/ in #{s} "+
-                                  "is not in the segment table")
+                                  "is not in the phone table")
         end
       end
       phones
@@ -100,18 +100,18 @@ module PhoneticAlign
     # Create the word list from comma-separated value data.
     #
     # [<em>word_data</em>] word list CSV string
-    # [<em>segment_data</em>] segment table CSV string
-    def initialize(word_data, segment_data = "")
-      # Initialize the segment table if segment data is specified.
-      segments = PhoneTable.new(segment_data)
+    # [<em>phone_data</em>] phone table CSV string
+    def initialize(word_data, phone_data = "")
+      # Initialize the phone table if phone data is specified.
+      phone_table = PhoneTable.new(phone_data)
       # Initialize the word list from the the specified data.
       FormFeatureReader.new(word_data).each do |form_s, features|
-        phones = if segments.empty?
-          # Create a featureless segment for each character in form_s.
+        phones = if phone_table.empty?
+          # Create a featureless phone for each character in form_s.
           form_s.split("").collect { |s| Phone.new(s) }
         else
-          # Look up the characters in form_s in the segment table.
-          segments.phone_sequence(form_s)
+          # Look up the characters in form_s in the phone table.
+          phone_table.phone_sequence(form_s)
         end
         self << Word.new(phones, FeatureValueMatrix.from_hash(features))
       end

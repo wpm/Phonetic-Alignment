@@ -406,7 +406,7 @@ EOTEXT
     end
   
     should "have a short stringification with the number of phones" do
-      assert_equal("PhoneTable: 8 segments", @phones.inspect)
+      assert_equal("PhoneTable: 8 phones", @phones.inspect)
     end
   end
 
@@ -448,8 +448,8 @@ class WordListTestCase < Test::Unit::TestCase
     end
 
     should "raise an ArgumentError if a word contains a segment not in the segment table" do
-      bad_segment_data = "FORM, LEMMA, PERNUM, ASPECT\ndʒʌXp,jump, non-3sg, perfect"
-      assert_raise(ArgumentError) { PhoneticAlign::WordList.new($words, bad_segment_data) }
+      bad_phone_data = "FORM, LEMMA, PERNUM, ASPECT\ndʒʌXp,jump, non-3sg, perfect"
+      assert_raise(ArgumentError) { PhoneticAlign::WordList.new($words, bad_phone_data) }
     end
 
     should "ignore missing final fields in a line of the table" do
