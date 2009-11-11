@@ -26,10 +26,18 @@ module PhoneticAlign
       end
     end
 
+    # Generate alignments for all the word pairs in the list that have
+    # overlapping semantics.
     def align_words
       alignments = []
       @word_list.each_symmetric_pair do |w1, w2|
-        alignments << Alignment.new(w1, w2)
+        if (w1.meaning & w2.meaning).empty?
+          LOGGER.debug("Skipping alignment for\n#{w1}\n#{w2}")
+          next
+        end
+        alignment = Alignment.new(w1, w2)
+        LOGGER.debug("Align\n#{alignment}")
+        alignments << alignment
       end
       alignments
     end
@@ -58,14 +66,12 @@ module PhoneticAlign
   class Alignment < EditAlign::Alignment
     INFINITY = 1.0/0
 
+    # List of segment boundary offsets
+    attr_reader :segment_boundaries
+
     def initialize(word1, word2)
       @segment_boundaries = []
       super(word1.phonetic_component.clone, word2.phonetic_component.clone)
-    end
-
-    # Insert segment boundaries into the alignment.
-    def segment!
-      # TODO Implement segment
     end
 
     # The string representation of the alignment consists of four lines:
@@ -95,6 +101,11 @@ module PhoneticAlign
           c = "D"
         end
       end
+      # Insert segment boundary markers.
+      segment_boundaries.each_with_index do |b, i|
+        index = b + i
+        [s_line, d_line, ops].each { |l| l.insert(index, "|") }
+      end
       # Find the longest element in all the lines.
       longest = [s_line, d_line, ops].map do |l|
         l.map{|e| e.jlength}.max
@@ -103,8 +114,59 @@ module PhoneticAlign
       lines = [s_line, d_line, ops].map do |list|
         list.map{|c| c.center(longest)}.join
       end
-      (lines + [edit_distance]).join("\n")
+      (lines + [(sprintf "%0.4f", match_rate)]).join("\n")
     end
+
+    # Alignment match rate
+    #
+    # The match rate is a number from 0 to 1 that measures the similarity of
+    # the two aligned words.
+    def match_rate
+      # TODO Different match rate for morphemes.
+      ops = edit_operations
+      match = 0
+      ops.each { |op| match += 1 if op.nil? }
+      match/ops.length.to_f
+    end
+
+    # Insert segment boundaries into the alignment.
+    #
+    # Segment boundaries are inserted between every pair of alignment slots
+    # that have different edit operations.  Phone substitutions less than or
+    # equal to a threshold are treated as matching for the purposes of
+    # segmentation.
+    #
+    # [<em>substitution_threshold</em>] difference beneath which phone
+    #                                   subsitutions are treated as matching
+    def segment!(substitution_threshold = 0)
+      ops = edit_operations
+      # Treat phone substitutions that are close enough as matching.
+      word1 = source_alignment
+      word2 = dest_alignment
+      ops.each_with_index do |op, i|
+        if op == :substitute and
+           word1[i].kind_of?(Phone) and word2[i].kind_of?(Phone) and
+           (word1[i] - word2[i]) <= substitution_threshold
+          ops[i] = nil
+        end
+      end
+      # Insert boundaries at edit operation discontinuities.
+      1.upto(ops.length-1) do |i|
+        @segment_boundaries << i if not ops[i] == ops[i-1]
+      end
+    end
+
+    def each_meaning_constraint
+      # TODO Implement each_meaning_constraint
+    end
+
+    # Get the edit operations and cache the result.
+    def edit_operations
+      @edit_operations_cache = super if @edit_operations_cache.nil?
+      @edit_operations_cache
+    end
+
+    protected
 
     # The substitution cost function used to perform alignments.
     #

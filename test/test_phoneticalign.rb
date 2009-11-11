@@ -23,6 +23,52 @@ siz,see, 3sg, perfect
 siiŋ,see,, imperfect
 EOTEXT
 
+# The words happy, unhappy, and unhappiness comprised of various combinations
+# of phones and morphemes.
+def happy_unhappy_unhappiness
+  # The distance between 'i' and 'y' is 0.5.  The distance between and two
+  # other non-equal phone pairs is 1.  This ensures that 'i' and 'y' will tend
+  # align with each other.
+  happy_unhappy_phones =<<-EOTEXT
+  FORM, LETTER, CLASS
+  i, i, iy
+  y, y, iy
+  a, a, a
+  e, e, e
+  h, h, h
+  n, n, n
+  p, p, p
+  s, s, s
+  u, u, u
+  EOTEXT
+  phone_table = PhoneticAlign::PhoneTable.new(happy_unhappy_phones)
+  empty_meaning = PhoneticAlign::FeatureValueMatrix.new
+  un_phones = phone_table.phone_sequence("un")
+  happy_phones = phone_table.phone_sequence("happy")
+  happi_phones = phone_table.phone_sequence("happi")
+  ness_phones = phone_table.phone_sequence("ness")
+  un_morph = PhoneticAlign::Morpheme.new([un_phones], empty_meaning)
+  happy_morph = PhoneticAlign::Morpheme.new([happy_phones], empty_meaning)
+  happy_happi_morph = PhoneticAlign::Morpheme.new([happy_phones, happi_phones], empty_meaning)
+  ness_morph = PhoneticAlign::Morpheme.new([ness_phones], empty_meaning)
+  # Words consisting of all phones.
+  happy_p = PhoneticAlign::Word.new(happy_phones, empty_meaning)
+  unhappy_p = PhoneticAlign::Word.new(un_phones + happy_phones, empty_meaning)
+  unhappiness_p = PhoneticAlign::Word.new(un_phones + happi_phones + ness_phones, empty_meaning)
+  # Words consisting of phones and morphemes.
+  unhappy_pm = PhoneticAlign::Word.new([un_morph] + happy_phones, empty_meaning)
+  # Words consisting of all morphemes
+  happy_m = PhoneticAlign::Word.new([happy_morph], empty_meaning)
+  unhappy_m = PhoneticAlign::Word.new([un_morph, happy_morph], empty_meaning)
+  happy_happi_ness_m = PhoneticAlign::Word.new([happy_happi_morph, ness_morph], empty_meaning)
+  return Struct.new(:happy_p, :unhappy_p, :unhappiness_p,
+                    :unhappy_pm,
+                    :happy_m, :unhappy_m, :happy_happi_ness_m).new(
+                    happy_p, unhappy_p, unhappiness_p,
+                    unhappy_pm,
+                    happy_m, unhappy_m, happy_happi_ness_m)
+end
+
 
 class ArrayTestCase < Test::Unit::TestCase
   context "An array" do
@@ -499,27 +545,26 @@ class WordListTestCase < Test::Unit::TestCase
 end
 
 
+# A version of PhoneticAlign::Alignment that allows direct manipulation of the
+# segment boundaries for testing purposes.
+class TestAlignment < PhoneticAlign::Alignment
+  attr_accessor :segment_boundaries
+end
+
+
 class AlignmentTestCase < Test::Unit::TestCase
   context "The alignment algorithm" do
     setup do
-      empty_meaning = PhoneticAlign::FeatureValueMatrix.new
-      un_phones = "un".split("").map { |s| PhoneticAlign::Phone.new(s) }
-      happy_phones = "happy".split("").map { |s| PhoneticAlign::Phone.new(s) }
-      happi_phones = "happi".split("").map { |s| PhoneticAlign::Phone.new(s) }
-      ness_phones = "ness".split("").map {|s| PhoneticAlign::Phone.new(s) }
-      un_morph = PhoneticAlign::Morpheme.new([un_phones], empty_meaning)
-      happy_morph = PhoneticAlign::Morpheme.new([happy_phones], empty_meaning)
-      happy_happi_morph = PhoneticAlign::Morpheme.new([happy_phones, happi_phones], empty_meaning)
-      ness_morph = PhoneticAlign::Morpheme.new([ness_phones], empty_meaning)
+      words = happy_unhappy_unhappiness
       # All phones.
-      @happy_p = PhoneticAlign::Word.new(happy_phones, empty_meaning)
-      @unhappy_p = PhoneticAlign::Word.new(un_phones + happy_phones, empty_meaning)
+      @happy_p = words.happy_p
+      @unhappy_p = words.unhappy_p
       # Phones and morphemes.
-      @unhappy_pm = PhoneticAlign::Word.new([un_morph] + happy_phones, empty_meaning)
+      @unhappy_pm = words.unhappy_pm
       # All morphemes
-      @happy_m = PhoneticAlign::Word.new([happy_morph], empty_meaning)
-      @unhappy_m = PhoneticAlign::Word.new([un_morph, happy_morph], empty_meaning)
-      @happy_happi_ness_m = PhoneticAlign::Word.new([happy_happi_morph, ness_morph], empty_meaning)
+      @happy_m = words.happy_m
+      @unhappy_m = words.unhappy_m
+      @happy_happi_ness_m = words.happy_happi_ness_m
     end
     
     should "align phones with phones" do
@@ -562,4 +607,67 @@ class AlignmentTestCase < Test::Unit::TestCase
     end
     
   end
+
+  context "Stringification of segmented alignments" do
+    setup do
+      words = happy_unhappy_unhappiness
+      @unhappy_unhappiness = TestAlignment.new(words.unhappy_p, words.unhappiness_p)
+    end
+
+    should "put vertical bars on the segment boundaries" do
+      @unhappy_unhappiness.segment_boundaries = [2, 7]
+      expected =<<-EOTEXT
+un|happy|----
+un|happi|ness
+  |    S|IIII
+0.5455
+EOTEXT
+      assert_equal(expected.strip, @unhappy_unhappiness.to_s)
+    end
+
+    should "not put vertical bars in unsegmented words" do
+      expected =<<-EOTEXT
+unhappy----
+unhappiness
+      SIIII
+0.5455
+EOTEXT
+      assert_equal(expected.strip, @unhappy_unhappiness.to_s)
+    end
+
+  end
+
+  context "Alignment segmentations" do
+    setup do
+      words = happy_unhappy_unhappiness
+      @happy_unhappy = TestAlignment.new(words.happy_p, words.unhappy_p)
+      @happy_unhappiness = TestAlignment.new(words.happy_p, words.unhappiness_p)
+    end
+
+    should "insert boundaries at edit operation discontinuities" do
+      @happy_unhappy.segment!
+      # --|happy
+      # un|happy
+      # II|
+      assert_equal([2], @happy_unhappy.segment_boundaries)
+    end
+
+    should "treat phone substitutions beneath a threshold as matching" do
+      @happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
+      # --|happy|----
+      # un|happi|ness
+      # II|     |IIII
+      assert_equal([2, 7], @happy_unhappiness.segment_boundaries)
+    end
+
+    should "not treat phone substitutions as matching if the distance is too large" do
+      @happy_unhappiness.segment!(0.2) # dist(i,y) > 0.5
+      # --|happ|y|----
+      # un|happ|i|ness
+      # II|    |S|IIII
+      assert_equal([2, 6, 7], @happy_unhappiness.segment_boundaries) 
+    end
+
+  end
+
 end
