@@ -1,6 +1,28 @@
 require "optparse"
 
 
+# Combinatorial extensions to Ruby's Array class.
+class Array
+  # Enumerates over all pairs of distinct items in the array where the order
+  # of the pair does not matter.  This returns N(N-1)/2 pairs for an array of
+  # length N.
+  #
+  #    > [1,2,3].each_symmetric_pair {|p| puts p.inspect}
+  #    [2, 1]
+  #    [3, 1]
+  #    [3, 2]
+  #    => 0
+  def each_symmetric_pair
+    0.upto(length-1) do |i|
+      0.upto(i-1) do |j|
+        yield [self[i], self[j]]
+      end
+    end
+  end
+
+end
+
+
 # Extension of the OptionParser class with functions that automatically verify
 # the input and print error messages.
 class OptionParser

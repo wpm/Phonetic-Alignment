@@ -27,7 +27,10 @@ module AnalyzeMorphemes
 
     word_list = PhoneticAlign::WordList.new(words, segments)
     analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list)
-    analysis.align_words
+
+    # Do analysis.
+    alignments = analysis.align_words
+    puts alignments.sort_by {|a| a.match_rate}.map {|a| a.to_s}.join("\n\n")
   end
 
   # Get parameters from the command line and configuration files.

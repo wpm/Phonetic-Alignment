@@ -1,7 +1,9 @@
 require "helper"
 
 
-$segments =<<-EOTEXT
+# Phone and word tables for various inflections of "jump" and "see".
+def jumps_sees
+  phones =<<-EOTEXT
 FORM, VOWEL, NASAL, VOICED
 dʒ,-,-,+
 m,-,+,-
@@ -12,8 +14,7 @@ z,-,-,+
 i,+,-,+
 ʌ,+,-,+
 EOTEXT
-
-$words =<<-EOTEXT
+  words =<<-EOTEXT
 FORM, LEMMA, PERNUM, ASPECT
 dʒʌmp,jump, non-3sg, perfect
 dʒʌmps,jump, 3sg, perfect
@@ -22,9 +23,12 @@ si,see, non-3sg, perfect
 siz,see, 3sg, perfect
 siiŋ,see,, imperfect
 EOTEXT
+  [phones, words]
+end
 
-# The words happy, unhappy, and unhappiness comprised of various combinations
-# of phones and morphemes.
+
+# The words "happy", "unhappy", and "unhappiness" comprised of various
+# combinations of phones and morphemes.
 def happy_unhappy_unhappiness
   # The distance between 'i' and 'y' is 0.5.  The distance between and two
   # other non-equal phone pairs is 1.  This ensures that 'i' and 'y' will tend
@@ -408,6 +412,10 @@ class FormFeatureReaderTestCase < Test::Unit::TestCase
 
   context "A Form-feature reader" do
 
+    setup do
+      @phones, @words = jumps_sees
+    end
+
     should "read in a feature chart containing Unicode IPA symbols" do
       expected = [
           ["dʒ", {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "+"}],
@@ -419,7 +427,7 @@ class FormFeatureReaderTestCase < Test::Unit::TestCase
           ["i",  {"VOWEL" => "+", "NASAL" => "-", "VOICED" => "+"}],
           ["ʌ",  {"VOWEL" => "+", "NASAL" => "-", "VOICED" => "+"}]
         ]
-      assert_equal(expected, PhoneticAlign::FormFeatureReader.new($segments).collect)
+      assert_equal(expected, PhoneticAlign::FormFeatureReader.new(@phones).collect)
     end
 
   end
@@ -430,7 +438,7 @@ end
 class PhoneTableTestCase < Test::Unit::TestCase
   context "A PhoneTable" do
     setup do
-      @phones = PhoneticAlign::PhoneTable.new($segments)
+      @phones = PhoneticAlign::PhoneTable.new(jumps_sees[0])
     end
 
     should "read in a feature chart containing Unicode IPA symbols" do
@@ -497,8 +505,12 @@ class WordListTestCase < Test::Unit::TestCase
 
   context "A Word list" do
 
+    setup do
+      @phones, @words = jumps_sees
+    end
+
     should "be creatable from a word list and segment table" do
-      word_list = PhoneticAlign::WordList.new($words, $segments)
+      word_list = PhoneticAlign::WordList.new(@words, @phones)
       transcriptions = ["dʒʌmp", "dʒʌmps", "dʒʌmpiŋ", "si", "siz", "siiŋ"]
       assert_equal(transcriptions, word_list.collect { |w| w.transcription })
       # jump is the first word in the list
@@ -512,7 +524,7 @@ class WordListTestCase < Test::Unit::TestCase
     end
 
     should "be creatable from a word list without a segment table" do
-      word_list = PhoneticAlign::WordList.new($words)
+      word_list = PhoneticAlign::WordList.new(@words)
       transcriptions = ["dʒʌmp", "dʒʌmps", "dʒʌmpiŋ", "si", "siz", "siiŋ"]
       assert_equal(transcriptions, word_list.collect { |w| w.transcription })
       djump = word_list.first
@@ -524,12 +536,12 @@ class WordListTestCase < Test::Unit::TestCase
     should "raise a RuntimeError if either of its intialization tables does not contain a FORM column" do
       no_form_data = "COL A, COL B\na,b"
       assert_raise(RuntimeError) { PhoneticAlign::WordList.new(no_form_data) }
-      assert_raise(RuntimeError) { PhoneticAlign::WordList.new($words, no_form_data) }
+      assert_raise(RuntimeError) { PhoneticAlign::WordList.new(@words, no_form_data) }
     end
 
     should "raise an ArgumentError if a word contains a segment not in the segment table" do
       bad_phone_data = "FORM, LEMMA, PERNUM, ASPECT\ndʒʌXp,jump, non-3sg, perfect"
-      assert_raise(ArgumentError) { PhoneticAlign::WordList.new($words, bad_phone_data) }
+      assert_raise(ArgumentError) { PhoneticAlign::WordList.new(@words, bad_phone_data) }
     end
 
     should "ignore missing final fields in a line of the table" do

@@ -100,7 +100,7 @@ module PhoneticAlign
     # Create the word list from comma-separated value data.
     #
     # [<em>word_data</em>] word list CSV string
-    # [<em>phone_data</em>] phone table CSV string
+    # [<em>phone_data</em>] optional phone table CSV string
     def initialize(word_data, phone_data = nil)
       # Initialize the phone table if phone data is specified.
       phone_table = PhoneTable.new(phone_data.nil? ? "" : phone_data)
