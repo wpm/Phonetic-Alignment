@@ -3,4 +3,4 @@
 $LOAD_PATH.unshift(File.join(File.dirname(__FILE__), '..', 'lib'))
 require "phoneticalign/analyze-morphemes"
 
-main(STDOUT, ARGV)
+AnalyzeMorphemes.main(STDOUT, ARGV)

@@ -1,37 +1,74 @@
 require "phoneticalign"
 
+# The <em>analyze-morphemes</em> executable.
+module AnalyzeMorphemes
 
-def main(stdout, arguments = [])
-  # Parse the command line arguments.
-  OptionParser.new do |opts|
-    opts.banner =<<-EOTEXT
-#{File.basename(__FILE__)} [OPTIONS] words [segments]
+  # The main routine for the executable <em>analyze-morphemes</em>.
+  def AnalyzeMorphemes.main(stdout, arguments = [])
+    # Get parameters from the command line and configuration files.
+    parameters = get_parameters
+    PhoneticAlign::LOGGER.debug("Parameters\n#{parameters}")
 
-Automatically discover segmentation hypotheses.
-EOTEXT
+    parser.exit_error("Words file not specified") \
+      unless parameters.has_key?(:words)
 
-    opts.on("-l", "--logging LEVEL", "Logging level") do |level|
-      PhoneticAlign.set_log_level(eval("Logger::#{level.upcase}"))
+    # Open data files.
+    words, segments = [:words, :segments].map do |arg|
+      arg = parameters[arg]
+      case arg
+      when nil
+        nil
+      when "-"
+        $stdin
+      else
+        open(File.expand_path(arg))
+      end
     end
-  end.parse_with_error_handling! do |parser|
-    if not (ARGV.length == 1 or ARGV.length == 2)
-      parser.exit_error("Incorrect number of arguments", 1)
-    end
+
+    word_list = PhoneticAlign::WordList.new(words, segments)
+    analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list)
+    analysis.align_words
   end
 
-  # Open the input files.
-  words, segments = ARGV.map do |arg|
-    case arg
-    when nil
-      nil
-    when "-"
-      $stdin
-    else
-      open(arg)
-    end
-  end
+  # Get parameters from the command line and configuration files.
+  def AnalyzeMorphemes.get_parameters
+    # Create the analysis parameters object from configuration files.
+    parameters = PhoneticAlign::AnalysisParameters.new
 
-  word_list = PhoneticAlign::WordList.new(words, segments)
-  puts word_list
+    # Parse the command line arguments.
+    config = nil
+    parser = OptionParser.new do |opts|
+      opts.banner =<<-EOTEXT
+  #{File.basename(__FILE__)} [OPTIONS] words [segments]
+
+  Automatically discover segmentation hypotheses.
+
+  Parameters may be specified in a YAML file called .phoneticalign in your home
+  directory.
+  EOTEXT
+
+      opts.on("-l", "--logging LEVEL", "Logging level") do |level|
+        parameters[:logging] = level.upcase
+      end
+
+      opts.on("-c", "--config FILE", "YAML config file") do |filename|
+        config = filename
+      end
+    end
+    parser.parse_with_error_handling!
+
+    # Incorporate options into the parameters.
+    parameters.merge_config_file!(config) if not config.nil?
+    if parameters.has_key?(:logging)
+      PhoneticAlign.set_log_level(eval("Logger::#{parameters[:logging]}"))
+    end
+
+    # Incorporate positional arguments into the parameters.
+    parameters[:words] = ARGV[0] if not ARGV[0].nil?
+    parameters[:segments] = ARGV[1] if not ARGV[1].nil?
+
+    parameters
+  end
+  
 end
 
