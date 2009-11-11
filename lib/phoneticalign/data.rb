@@ -101,9 +101,9 @@ module PhoneticAlign
     #
     # [<em>word_data</em>] word list CSV string
     # [<em>phone_data</em>] phone table CSV string
-    def initialize(word_data, phone_data = "")
+    def initialize(word_data, phone_data = nil)
       # Initialize the phone table if phone data is specified.
-      phone_table = PhoneTable.new(phone_data)
+      phone_table = PhoneTable.new(phone_data.nil? ? "" : phone_data)
       # Initialize the word list from the the specified data.
       FormFeatureReader.new(word_data).each do |form_s, features|
         phones = if phone_table.empty?

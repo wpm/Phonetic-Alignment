@@ -6,6 +6,7 @@ require "set"
 require "phoneticalign/analysis"
 require "phoneticalign/data"
 require "phoneticalign/model"
+require "phoneticalign/utilities"
 
 
 # Combinatorial extensions to Ruby's Array class.

@@ -11,6 +11,7 @@ begin
     gem.homepage = "http://github.com/wpm/Phonetic-Alignment"
     gem.authors = ["W.P. McNeill"]
     gem.add_development_dependency "thoughtbot-shoulda", ">= 0"
+    gem.executables << "analyze-morphemes"
     # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
   end
   Jeweler::GemcutterTasks.new
