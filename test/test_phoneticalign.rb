@@ -153,11 +153,29 @@ class PhoneTestCase < Test::Unit::TestCase
             PhoneticAlign::FeatureValueMatrix[:f1 => :v1, :f2 => :v3])
     end
 
-    should "Equal another phone with the same IPA and features" do
+    should "equal another phone with the same IPA and features" do
       features = PhoneticAlign::FeatureValueMatrix[:f1 => :v1, :f2 => :v2]
       p1 = PhoneticAlign::Phone.new("p", features)
       p2 = PhoneticAlign::Phone.new("p", features)
       assert(p1 == p2, "#{p1} != #{p2}")
+    end
+
+    should "not equal another phone with different IPA" do
+      p1 = PhoneticAlign::Phone.new("x", PhoneticAlign::FeatureValueMatrix[:f1 => :v1, :f2 => :v2])
+      p2 = PhoneticAlign::Phone.new("y", PhoneticAlign::FeatureValueMatrix[:f1 => :v1, :f2 => :v2])
+      assert_not_equal(p1, p2)
+    end
+
+    should "not equal another phone with different features" do
+      p1 = PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
+      p2 = PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f2 => :v2])
+      assert_not_equal(p1, p2)
+    end
+
+    should "not equal a morpheme" do
+      p = PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
+      m = PhoneticAlign::Morpheme.new([p], PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
+      assert_not_equal(m, p)
     end
 
     should "handle unicode IPA characters" do
@@ -174,6 +192,15 @@ class PhoneTestCase < Test::Unit::TestCase
     should "define a difference operator based on feature similarity" do
       assert_equal(0.5, @j - @s)
       assert_equal(0.5, @s - @j)
+    end
+
+    should "make the difference operator an IPA indicator function if there are no features" do
+      a1 = PhoneticAlign::Phone.new("a")
+      a2 = PhoneticAlign::Phone.new("a")
+      b = PhoneticAlign::Phone.new("b")
+      assert_equal(0, a1 - a2)
+      assert_equal(1, b - a1)
+      assert_equal(1, a1 - b)
     end
 
     should "stringify on a single line with the IPA character followed by the features" do
@@ -202,10 +229,16 @@ class MorphemeTestCase < Test::Unit::TestCase
   end
 
   context "A Morpheme" do
-    should "Equal another morpheme with the same allophones and meaning" do
+    should "equal another morpheme with the same allophones and meaning" do
       sz1 = PhoneticAlign::Morpheme.new([[@phone_s], [@phone_z]], @plural)
       sz2 = PhoneticAlign::Morpheme.new([[@phone_s], [@phone_z]], @plural)
       assert(sz1 == sz2, "#{sz1} != #{sz2}")
+    end
+
+    should "not equal a phone" do
+      p = PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
+      m = PhoneticAlign::Morpheme.new([p], PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
+      assert_not_equal(p, m)
     end
 
     should "have a transcription that is a backslash-delimited list of allphone transcriptions" do
@@ -226,7 +259,7 @@ class MorphemeTestCase < Test::Unit::TestCase
       assert_equal("ed", @ed.transcription)
     end
 
-    should "Accept either a list or a set of allophones in its constructor" do
+    should "accept either a list or a set of allophones in its constructor" do
       sz_set = PhoneticAlign::Morpheme.new(Set.new([[@phone_s], [@phone_z]]), @plural)
       sz_list = PhoneticAlign::Morpheme.new([[@phone_s], [@phone_z]], @plural)
       assert_instance_of(Set, sz_list.allophones)
@@ -356,23 +389,24 @@ class PhoneTableTestCase < Test::Unit::TestCase
 
     should "read in a feature chart containing Unicode IPA symbols" do
       expected = {
-          "dʒ" => PhoneticAlign::Phone.new("dʒ",
+          "dʒ" => PhoneticAlign::Phone.new("dʒ".to_sym,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym]),
-          "m" => PhoneticAlign::Phone.new("m",
+          "m" => PhoneticAlign::Phone.new(:m,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "+".to_sym, :VOICED => "-".to_sym]),
-          "ŋ" => PhoneticAlign::Phone.new("ŋ",
+          "ŋ" => PhoneticAlign::Phone.new("ŋ".to_sym,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "+".to_sym, :VOICED => "+".to_sym]),
-          "p" => PhoneticAlign::Phone.new("p",
+          "p" => PhoneticAlign::Phone.new(:p,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "-".to_sym]),
-          "s" => PhoneticAlign::Phone.new("s",
+          "s" => PhoneticAlign::Phone.new(:s,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "-".to_sym]),
-          "z" => PhoneticAlign::Phone.new("z",
+          "z" => PhoneticAlign::Phone.new(:z,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "-".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym]),
-          "i" => PhoneticAlign::Phone.new("i",
+          "i" => PhoneticAlign::Phone.new(:i,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "+".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym]),
-          "ʌ" => PhoneticAlign::Phone.new("ʌ",
+          "ʌ" => PhoneticAlign::Phone.new("ʌ".to_sym,
                   PhoneticAlign::FeatureValueMatrix[:VOWEL => "+".to_sym, :NASAL => "-".to_sym, :VOICED => "+".to_sym])
         }
+      assert_equal(expected.keys.sort, @phones.keys.sort)
       assert_equal(expected, @phones)
     end
 
@@ -462,4 +496,70 @@ class WordListTestCase < Test::Unit::TestCase
 
   end
 
+end
+
+
+class AlignmentTestCase < Test::Unit::TestCase
+  context "The alignment algorithm" do
+    setup do
+      empty_meaning = PhoneticAlign::FeatureValueMatrix.new
+      un_phones = "un".split("").map { |s| PhoneticAlign::Phone.new(s) }
+      happy_phones = "happy".split("").map { |s| PhoneticAlign::Phone.new(s) }
+      happi_phones = "happi".split("").map { |s| PhoneticAlign::Phone.new(s) }
+      ness_phones = "ness".split("").map {|s| PhoneticAlign::Phone.new(s) }
+      un_morph = PhoneticAlign::Morpheme.new([un_phones], empty_meaning)
+      happy_morph = PhoneticAlign::Morpheme.new([happy_phones], empty_meaning)
+      happy_happi_morph = PhoneticAlign::Morpheme.new([happy_phones, happi_phones], empty_meaning)
+      ness_morph = PhoneticAlign::Morpheme.new([ness_phones], empty_meaning)
+      # All phones.
+      @happy_p = PhoneticAlign::Word.new(happy_phones, empty_meaning)
+      @unhappy_p = PhoneticAlign::Word.new(un_phones + happy_phones, empty_meaning)
+      # Phones and morphemes.
+      @unhappy_pm = PhoneticAlign::Word.new([un_morph] + happy_phones, empty_meaning)
+      # All morphemes
+      @happy_m = PhoneticAlign::Word.new([happy_morph], empty_meaning)
+      @unhappy_m = PhoneticAlign::Word.new([un_morph, happy_morph], empty_meaning)
+      @happy_happi_ness_m = PhoneticAlign::Word.new([happy_happi_morph, ness_morph], empty_meaning)
+    end
+    
+    should "align phones with phones" do
+      # --happy
+      # unhappy
+      # II
+      align = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
+      assert_equal(2, align.edit_distance)
+      assert_equal([:insert, :insert, nil, nil, nil, nil, nil], align.edit_operations)
+    end
+    
+    should "align morphemes and morphemes" do
+      #  -  happy
+      # un  happy
+      #  I
+      align = PhoneticAlign::Alignment.new(@happy_m, @unhappy_m)
+      assert_equal(1, align.edit_distance)
+      assert_equal([:insert, nil], align.edit_operations)
+    end
+    
+    should "align compatible allomorphs" do
+      # un        happy        -     
+      #  -     happi/happy   ness    
+      #  D                     I     
+      align = PhoneticAlign::Alignment.new(@unhappy_m, @happy_happi_ness_m)
+      assert_equal(2, align.edit_distance)
+      assert_equal([:delete, nil, :insert], align.edit_operations)
+    end
+    
+    should "not align phones with morphemes" do
+      # u - n h a p p y
+      # - un- h a p p y
+      # D I D
+      #
+      # Note that this alignment is not ideal.  The morpheme un splits the
+      # character sequence u,n.
+      align = PhoneticAlign::Alignment.new(@unhappy_p, @unhappy_pm)
+      assert_equal(3, align.edit_distance)
+      assert_equal([:delete, :insert, :delete, nil, nil, nil, nil, nil], align.edit_operations)
+    end
+    
+  end
 end

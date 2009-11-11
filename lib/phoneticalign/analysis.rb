@@ -60,12 +60,50 @@ module PhoneticAlign
 
     def initialize(word1, word2)
       @segment_boundaries = []
-      super(word1.phonetic_component.clone, word1.phonetic_component.clone)
+      super(word1.phonetic_component.clone, word2.phonetic_component.clone)
     end
 
     # Insert segment boundaries into the alignment.
     def segment!
-      # TOTO Implement segment
+      # TODO Implement segment
+    end
+
+    # The string representation of the alignment consists of four lines:
+    #
+    # 1. The source array
+    # 2. The destination array
+    # 3. An annotation line with S, I, D or nothing for aligned elements.
+    # 4. The edit distance
+    def to_s
+      # Create the source and destination lines.
+      s_line = source_alignment('-').map do |s|
+        s.respond_to?(:transcription) ? s.transcription : s.to_s
+      end
+      d_line = dest_alignment('-').map do |s|
+        s.respond_to?(:transcription) ? s.transcription : s.to_s
+      end
+      # Create short pneumonics for the edit operations.
+      ops = edit_operations.map do |op|
+        case op
+        when nil
+          c = " "
+        when :substitute
+          c = "S"
+        when :insert
+          c = "I"
+        when :delete
+          c = "D"
+        end
+      end
+      # Find the longest element in all the lines.
+      longest = [s_line, d_line, ops].map do |l|
+        l.map{|e| e.jlength}.max
+      end.max
+      # Center each array element over a field of that width.
+      lines = [s_line, d_line, ops].map do |list|
+        list.map{|c| c.center(longest)}.join
+      end
+      (lines + [edit_distance]).join("\n")
     end
 
     # The substitution cost function used to perform alignments.

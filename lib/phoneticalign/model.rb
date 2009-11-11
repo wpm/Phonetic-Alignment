@@ -71,17 +71,30 @@ module PhoneticAlign
     end
 
     # Phones are equal if they have the same IPA character and features.
+    #
+    # This function returns false if other is not a kind of Phone.  We do
+    # explicit type checking here instead of relying on duck typing because
+    # the edit alignment algorithm will compare phones and morphemes.
     def ==(other)
-      ipa = other.ipa and features == other.features
+      other.kind_of?(Phone) and
+      ipa == other.ipa and
+      features == other.features
     end
 
     # The number of features in which two phones differ divided by the number
     # of features in this phone.
     #
-    # This operation is symmetrical if both phones have th same set of
+    # This operation is symmetrical if both phones have the same set of
     # features.
+    #
+    # If either of the phones does not have features, the function returns 0
+    # if their IPA transcriptions are equal and 1 otherwise.
     def -(other)
-      (features - other.features).length/features.length.to_f
+      if features.empty? or other.features.empty?
+        ipa == other.ipa ? 0 : 1
+      else
+        (features - other.features).length/features.length.to_f
+      end
     end
 
     # The IPA chracter followed by the feature matrix
@@ -93,12 +106,17 @@ module PhoneticAlign
     # characters in a table aligned.
     def to_s(ipa_field_width = nil)
       ipa_s = ipa_field_width.nil? ?
-              ipa : sprintf("%-#{ipa_field_width}s", ipa)
+              ipa : sprintf("%-#{ipa_field_width}s", transcription)
       "#{ipa_s} #{features}"
     end
     
     def inspect
       to_s
+    end
+    
+    # The IPA character
+    def transcription
+      ipa.to_s
     end
   end
 
@@ -112,6 +130,8 @@ module PhoneticAlign
 
     # Create the morpheme from an allophone set and a meaning.
     #
+    # An allophone is a sequence of phones.
+    #
     # [_allophones_] sequence of allophones
     # [_meaning_] the meaning
     def initialize(allophones, meaning)
@@ -120,9 +140,13 @@ module PhoneticAlign
       @meaning = meaning
     end
 
-    # Morphemes are equal if they have the same allophone sets and meanings.
+    # Morphemes are equal if they are compatible.
+    #
+    # This function returns false if other is not a kind of Morpheme.  We do
+    # explicit type checking here instead of relying on duck typing because
+    # the edit alignment algorithm will compare phones and morphemes.
     def ==(other)
-      allophones == other.allophones and meaning == other.meaning
+      other.kind_of?(Morpheme) and is_compatible?(other)
     end
 
     # Two morphemes are compatible if they have the same meaning and the
