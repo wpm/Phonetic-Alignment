@@ -76,7 +76,7 @@ end
 
 class ArrayTestCase < Test::Unit::TestCase
   context "An array" do
-    
+
     should "support enumeration over symmetric pairs of items" do
       pairs = []
       [1, 2, 3, 4].each_symmetric_pair {|p| pairs << p}
@@ -86,7 +86,7 @@ class ArrayTestCase < Test::Unit::TestCase
       [].each_symmetric_pair {|p| pairs << p}
       assert_equal([], pairs)
     end
-    
+
   end
 end
 
@@ -475,7 +475,7 @@ class PhoneTableTestCase < Test::Unit::TestCase
     should "raise an exception for an unrecognized character" do
       assert_raise(ArgumentError) { @phones.phone_sequence("six") }
     end
-  
+
     should "have a long stringification that prints the table in IPA order" do
       expected =<<-EOTEXT
 dʒ [NASAL = -, VOICED = +, VOWEL = -]
@@ -492,7 +492,7 @@ EOTEXT
       expected.strip!
       assert_equal(expected, @phones.to_s, "#{expected.to_s}\nexpected but was\n#{@phones.to_s}")
     end
-  
+
     should "have a short stringification with the number of phones" do
       assert_equal("PhoneTable: 8 phones", @phones.inspect)
     end
@@ -578,7 +578,7 @@ class AlignmentTestCase < Test::Unit::TestCase
       @unhappy_m = words.unhappy_m
       @happy_happi_ness_m = words.happy_happi_ness_m
     end
-    
+
     should "align phones with phones" do
       # --happy
       # unhappy
@@ -587,7 +587,7 @@ class AlignmentTestCase < Test::Unit::TestCase
       assert_equal(2, align.edit_distance)
       assert_equal([:insert, :insert, nil, nil, nil, nil, nil], align.edit_operations)
     end
-    
+
     should "align morphemes and morphemes" do
       #  -  happy
       # un  happy
@@ -596,16 +596,16 @@ class AlignmentTestCase < Test::Unit::TestCase
       assert_equal(1, align.edit_distance)
       assert_equal([:insert, nil], align.edit_operations)
     end
-    
+
     should "align compatible allomorphs" do
-      # un        happy        -     
-      #  -     happi/happy   ness    
-      #  D                     I     
+      # un        happy        -
+      #  -     happi/happy   ness
+      #  D                     I
       align = PhoneticAlign::Alignment.new(@unhappy_m, @happy_happi_ness_m)
       assert_equal(2, align.edit_distance)
       assert_equal([:delete, nil, :insert], align.edit_operations)
     end
-    
+
     should "not align phones with morphemes" do
       # u - n h a p p y
       # - un- h a p p y
@@ -617,7 +617,7 @@ class AlignmentTestCase < Test::Unit::TestCase
       assert_equal(3, align.edit_distance)
       assert_equal([:delete, :insert, :delete, nil, nil, nil, nil, nil], align.edit_operations)
     end
-    
+
   end
 
   context "Stringification of segmented alignments" do
@@ -647,13 +647,72 @@ EOTEXT
       assert_equal(expected.strip, @unhappy_unhappiness.to_s)
     end
 
+    should "optionally write carets under emphasized segments" do
+      @unhappy_unhappiness.segment_boundaries = [2, 7]
+      first_segment =<<-EOTEXT
+un|happy|----
+un|happi|ness
+  |    S|IIII
+^^|     |    
+0.5455
+EOTEXT
+      assert_equal(first_segment.strip, @unhappy_unhappiness.to_s(0),
+                   "#{first_segment.strip}\nnot\n#{@unhappy_unhappiness.to_s(0)}")
+      middle_segment =<<-EOTEXT
+un|happy|----
+un|happi|ness
+  |    S|IIII
+  |^^^^^|    
+0.5455
+EOTEXT
+      assert_equal(middle_segment.strip, @unhappy_unhappiness.to_s(1),
+                   "#{middle_segment.strip}\nnot\n#{@unhappy_unhappiness.to_s(1)}")
+      last_segment =<<-EOTEXT
+un|happy|----
+un|happi|ness
+  |    S|IIII
+  |     |^^^^
+0.5455
+EOTEXT
+      assert_equal(last_segment.strip, @unhappy_unhappiness.to_s(2),
+                   "#{last_segment.strip}\nnot\n#{@unhappy_unhappiness.to_s(2)}")
+    end
+
   end
 
-  context "Alignment segmentations" do
+  context "Alignments" do
     setup do
       words = happy_unhappy_unhappiness
       @happy_unhappy = TestAlignment.new(words.happy_p, words.unhappy_p)
       @happy_unhappiness = TestAlignment.new(words.happy_p, words.unhappiness_p)
+    end
+
+    should "define a length function equal to the number of slots" do
+      assert_equal(11, @happy_unhappiness.length)
+      assert_equal(7, @happy_unhappy.length)
+    end
+
+    should "return segment ranges given segment indexes" do
+      @happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
+      # --|happy|----
+      # un|happi|ness
+      # II|    S|IIII
+      assert_equal([0,1], @happy_unhappiness.segment_range(0))
+      assert_equal([2,6], @happy_unhappiness.segment_range(1))
+      assert_equal([7,10], @happy_unhappiness.segment_range(2))
+    end
+
+    should "have phonetic operation lists that represent phone substitutions" do
+      @happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
+      # --|happy|----
+      # un|happi|ness
+      # II|    S|IIII
+      # y <-> i is a substitution in the edit operations but a nil in the
+      # phonetic operations.
+      assert_equal([:insert]*2 + [nil]*4 + [:substitute] + [:insert]*4,
+                   @happy_unhappiness.edit_operations)
+      assert_equal([:insert]*2 + [nil]*5 + [:insert]*4,
+                   @happy_unhappiness.phonetic_operations)
     end
 
     should "insert boundaries at edit operation discontinuities" do
@@ -668,7 +727,7 @@ EOTEXT
       @happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
       # --|happy|----
       # un|happi|ness
-      # II|     |IIII
+      # II|    S|IIII
       assert_equal([2, 7], @happy_unhappiness.segment_boundaries)
     end
 
@@ -677,7 +736,46 @@ EOTEXT
       # --|happ|y|----
       # un|happ|i|ness
       # II|    |S|IIII
-      assert_equal([2, 6, 7], @happy_unhappiness.segment_boundaries) 
+      assert_equal([2, 6, 7], @happy_unhappiness.segment_boundaries)
+    end
+
+  end
+
+end
+
+
+class SegementTestCase < Test::Unit::TestCase
+  context "Segments" do
+    setup do
+      words = happy_unhappy_unhappiness
+      happy_unhappiness = TestAlignment.new(words.happy_p, words.unhappiness_p)
+      # --|happy|----
+      # un|happi|ness
+      # II|    S|IIII
+      happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
+      @segments = happy_unhappiness.segments
+    end
+
+    should "have one more segment than there are segment boundaries" do
+      assert_equal(3, @segments.length)
+    end
+
+    should "be phonetically same if they have all nil phonetic edit operations" do
+      assert_equal(false, @segments[0].phonetically_same?,
+                   "phonetically_same?\n#{@segments[0]}")
+      assert_equal(true, @segments[1].phonetically_same?,
+                   "phonetically_same?\n#{@segments[1]}")
+      assert_equal(false, @segments[2].phonetically_same?,
+                   "phonetically_same?\n#{@segments[2]}")
+    end
+
+    should "be phonetically same if they have any non-nil phonetic edit operations" do
+      assert_equal(true, @segments[0].phonetically_different?,
+                   "phonetically_different?\n#{@segments[0]}")
+      assert_equal(false, @segments[1].phonetically_different?,
+                   "phonetically_different?\n#{@segments[0]}")
+      assert_equal(true, @segments[2].phonetically_different?,
+                   "phonetically_different?\n#{@segments[0]}")
     end
 
   end

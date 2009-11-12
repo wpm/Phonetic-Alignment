@@ -1,7 +1,6 @@
 $KCODE="u"
 require "jcode"
 require "logger"
-require "set"
 
 require "phoneticalign/analysis"
 require "phoneticalign/data"

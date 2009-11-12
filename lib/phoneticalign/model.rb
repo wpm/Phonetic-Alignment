@@ -1,3 +1,6 @@
+require "editalign"
+require "set"
+
 module PhoneticAlign
 
   # A pairing of features and values.
@@ -109,11 +112,11 @@ module PhoneticAlign
               ipa : sprintf("%-#{ipa_field_width}s", transcription)
       "#{ipa_s} #{features}"
     end
-    
+
     def inspect
       to_s
     end
-    
+
     # The IPA character
     def transcription
       ipa.to_s
@@ -221,5 +224,233 @@ module PhoneticAlign
 
   end
 
+
+  # An edit-distance alignment between the phonetic components of two words.
+  class Alignment < EditAlign::Alignment
+    INFINITY = 1.0/0
+
+    # List of segment boundary offsets
+    attr_reader :segment_boundaries
+
+    # Align two Word objects
+    #
+    # [_word1_] word to align
+    # [_word2_] word to align
+    def initialize(word1, word2)
+      @segment_boundaries = []
+      super(word1.phonetic_component.clone, word2.phonetic_component.clone)
+    end
+
+    # The string representation of the alignment consists of four or five
+    # lines:
+    #
+    # 1. The source array
+    # 2. The destination array
+    # 3. An annotation line with S, I, D or nothing for aligned elements
+    # 4. An optional emphasis line for emphasized segments
+    # 5. The match rate
+    #
+    # [_emphasis_] segment to emphasize
+    def to_s(emphasis = nil)
+      # Create the source and destination lines.
+      s_line = source_alignment('-').map do |s|
+        s.respond_to?(:transcription) ? s.transcription : s.to_s
+      end
+      d_line = dest_alignment('-').map do |s|
+        s.respond_to?(:transcription) ? s.transcription : s.to_s
+      end
+      # Create short pneumonics for the edit operations.
+      ops = edit_operations.map do |op|
+        case op
+        when nil
+          c = " "
+        when :substitute
+          c = "S"
+        when :insert
+          c = "I"
+        when :delete
+          c = "D"
+        end
+      end
+      lines = [s_line, d_line, ops]
+      # Find the longest element in all the lines.
+      longest = lines.map do |l|
+        l.map{|e| e.jlength}.max
+      end.max
+      # Optionally add a line of carets beneath an emphasized segment.
+      if not emphasis.nil?
+        emphasis_from, emphasis_to = segment_range(emphasis)
+        # emphasis_from = emphasis.zero? ? 0 : segment_boundaries[emphasis-1]
+        # emphasis_to = emphasis == segment_boundaries.length ?
+        #   s_line.length : segment_boundaries[emphasis]
+        emphasis_line = []
+        emphasis_line += [""] * (emphasis_from - 0)
+        emphasis_line += ["^" * longest] * (emphasis_to - emphasis_from + 1)
+        emphasis_line += [""] * (s_line.length - emphasis_to - 1)
+        lines << emphasis_line
+      end
+      # Insert segment boundary markers.
+      segment_boundaries.each_with_index do |b, i|
+        index = b + i
+        lines.each { |l| l.insert(index, "|") }
+      end
+      # Center each array element over a field of that width.
+      lines = lines.map do |list|
+        list.map{|c| c.center(longest)}.join
+      end
+      (lines + [(sprintf "%0.4f", match_rate)]).join("\n")
+    end
+
+    # The number of slots in the alignment.
+    def length
+      edit_operations.length
+    end
+
+    # Alignment match rate
+    #
+    # The match rate is a number from 0 to 1 that measures the similarity of
+    # the two aligned words.
+    def match_rate
+      # TODO Different match rate for morpheme and phone alignments.
+      ops = edit_operations
+      match = 0
+      ops.each { |op| match += 1 if op.nil? }
+      match/ops.length.to_f
+    end
+
+    def each_morpheme_hypothesis
+      # TODO Implement each_morpheme_hypothesis
+    end
+
+    # Divide the alignment into segments
+    #
+    # Segment boundaries are inserted between every pair of alignment slots
+    # that have different phonetic edit operations.  Phone substitutions less
+    # than or equal to a threshold are treated as matching for the purposes of
+    # segmentation.
+    #
+    # [<em>substitution_threshold</em>] difference beneath which phone
+    #                                   subsitutions are treated as matching
+    def segment!(substitution_threshold = 0)
+      @segment_boundaries = []
+      @substitution_threshold = substitution_threshold
+      ops = phonetic_operations
+      # Insert boundaries at phonetic operation discontinuities.
+      1.upto(ops.length-1) do |i|
+        @segment_boundaries << i if not ops[i] == ops[i-1]
+      end
+    end
+
+    # The segments in this alignment.  This returns and Array of Segment
+    # objects.
+    def segments
+      s = []
+      0.upto(segment_boundaries.length) do |index|
+        s << Segment.new(self, index)
+      end
+      s
+    end
+
+    # Beginning and ending slot indexes of the specified segment.
+    #
+    # [_index_] index of a segment in this alignment
+    def segment_range(index)
+      from = index.zero? ? 0 : segment_boundaries[index-1]
+      to = index == segment_boundaries.length ? length :
+                                                segment_boundaries[index]
+      [from, to-1]
+    end
+
+    # Phonetic edit operations
+    #
+    # The list of phonetic edit operations is the same as the list returned by
+    # the alignment algorithm except that phone substitutions between phones
+    # whose distance falls below a given threshold are treated as aligned
+    # slots.
+    #
+    # The threshold is specified when segment! is called.  If the alignment
+    # has not yet been segmented, this function simply returns the edit
+    # operations.
+    def phonetic_operations
+      ops = edit_operations.clone
+      return ops if @substitution_threshold.nil?
+      word1 = source_alignment
+      word2 = dest_alignment
+      ops.each_with_index do |op, i|
+        if op == :substitute and
+           word1[i].kind_of?(Phone) and word2[i].kind_of?(Phone) and
+           (word1[i] - word2[i]) <= @substitution_threshold
+          ops[i] = nil
+        end
+      end
+      ops
+    end
+
+    # Get the edit operations and cache the result.
+    def edit_operations
+      @edit_operations_cache = super if @edit_operations_cache.nil?
+      @edit_operations_cache
+    end
+
+    protected
+
+    # The substitution cost function used to perform alignments.
+    #
+    # The cost of substituting one segment for another in an alignment is
+    # equal to the distance between them.
+    #
+    # [_item1_] a Phone or Morpheme
+    # [_item2_] a Phone or Morpheme
+    #
+    # This function is called by the parent class.
+    def substitute(item1, item2)
+      if item1 == item2
+        0
+      elsif item1.nil? or item2.nil?
+        # Insertions and deletions have a cost of 1.
+        1
+      elsif item1.is_a?(Morpheme) and item2.is_a?(Morpheme)
+        # Morphemes only align with compatible morphemes.
+        item1.is_compatible?(item2) ? 0 : INFINITY
+      elsif item1.is_a?(Phone) and item2.is_a?(Phone)
+        # The substitution cost of non-equal phones is a function of their
+        # phonetic distance.
+        # TODO Scale by substitution penalty.
+        item1 - item2
+      else
+        # Phones and morphemes never align.
+        INFINITY
+      end
+    end
+
+  end
+
+
+  # A segment is a contiguous portion of an alignment.
+  class Segment
+    # [_alignment_] alignment in which this segment appears
+    # [_index_] index of this segment
+    def initialize(alignment, index)
+      @alignment = alignment
+      @index = index
+    end
+
+    # The alignment with this segmenent emphasized.
+    def to_s
+      @alignment.to_s(@index)
+    end
+
+    # Is this segment phonetically the same in both words?
+    def phonetically_same?
+      from, to = @alignment.segment_range(@index)
+      @alignment.phonetic_operations[from..to].all? {|op| op.nil?}
+    end
+
+    # Is this segment phonetically different in the two words?
+    def phonetically_different?
+      not phonetically_same?
+    end
+
+  end
 
 end
