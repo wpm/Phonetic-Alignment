@@ -46,31 +46,39 @@ def happy_unhappy_unhappiness
   u, u, u
   EOTEXT
   phone_table = PhoneticAlign::PhoneTable.new(happy_unhappy_phones)
-  empty_meaning = PhoneticAlign::FeatureValueMatrix.new
+  # Phonetic sequences
   un_phones = phone_table.phone_sequence("un")
   happy_phones = phone_table.phone_sequence("happy")
   happi_phones = phone_table.phone_sequence("happi")
   ness_phones = phone_table.phone_sequence("ness")
-  un_morph = PhoneticAlign::Morpheme.new([un_phones], empty_meaning)
-  happy_morph = PhoneticAlign::Morpheme.new([happy_phones], empty_meaning)
-  happy_happi_morph = PhoneticAlign::Morpheme.new([happy_phones, happi_phones], empty_meaning)
-  ness_morph = PhoneticAlign::Morpheme.new([ness_phones], empty_meaning)
+  # Meanings
+  un_meaning = PhoneticAlign::FeatureValueMatrix[:POL => :neg]
+  happy_meaning = PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy]
+  ness_meaning = PhoneticAlign::FeatureValueMatrix[:POS => :noun]
+  # Morphemes
+  un_morph = PhoneticAlign::Morpheme.new([un_phones], un_meaning)
+  happy_morph = PhoneticAlign::Morpheme.new([happy_phones], happy_meaning)
+  happy_happi_morph = PhoneticAlign::Morpheme.new([happy_phones, happi_phones], happy_meaning)
+  ness_morph = PhoneticAlign::Morpheme.new([ness_phones], ness_meaning)
   # Words consisting of all phones.
-  happy_p = PhoneticAlign::Word.new(happy_phones, empty_meaning)
-  unhappy_p = PhoneticAlign::Word.new(un_phones + happy_phones, empty_meaning)
-  unhappiness_p = PhoneticAlign::Word.new(un_phones + happi_phones + ness_phones, empty_meaning)
+  happy_p = PhoneticAlign::Word.new(happy_phones, happy_meaning)
+  unhappy_p = PhoneticAlign::Word.new(un_phones + happy_phones, un_meaning + happy_meaning)
+  unhappiness_p = PhoneticAlign::Word.new(un_phones + happi_phones + ness_phones, un_meaning + happy_meaning + ness_meaning)
   # Words consisting of phones and morphemes.
-  unhappy_pm = PhoneticAlign::Word.new([un_morph] + happy_phones, empty_meaning)
+  unhappy_pm = PhoneticAlign::Word.new([un_morph] + happy_phones, un_meaning + happy_meaning)
   # Words consisting of all morphemes
-  happy_m = PhoneticAlign::Word.new([happy_morph], empty_meaning)
-  unhappy_m = PhoneticAlign::Word.new([un_morph, happy_morph], empty_meaning)
-  happy_happi_ness_m = PhoneticAlign::Word.new([happy_happi_morph, ness_morph], empty_meaning)
+  happy_m = PhoneticAlign::Word.new([happy_morph], happy_meaning)
+  unhappy_m = PhoneticAlign::Word.new([un_morph, happy_morph], un_meaning + happy_meaning)
+  happy_happi_ness_m = PhoneticAlign::Word.new([happy_happi_morph, ness_morph], happy_meaning)
+  unhappy_happi_ness_m = PhoneticAlign::Word.new([un_morph, happy_happi_morph, ness_morph], un_meaning + happy_meaning + ness_meaning)
   return Struct.new(:happy_p, :unhappy_p, :unhappiness_p,
                     :unhappy_pm,
-                    :happy_m, :unhappy_m, :happy_happi_ness_m).new(
+                    :happy_m, :unhappy_m, :happy_happi_ness_m, :unhappy_happi_ness_m,
+                    :un_meaning, :happy_meaning, :ness_meaning).new(
                     happy_p, unhappy_p, unhappiness_p,
                     unhappy_pm,
-                    happy_m, unhappy_m, happy_happi_ness_m)
+                    happy_m, unhappy_m, happy_happi_ness_m, unhappy_happi_ness_m,
+                    un_meaning, happy_meaning, ness_meaning)
 end
 
 
@@ -418,14 +426,14 @@ class FormFeatureReaderTestCase < Test::Unit::TestCase
 
     should "read in a feature chart containing Unicode IPA symbols" do
       expected = [
-          ["dʒ", {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "+"}],
-          ["m",  {"VOWEL" => "-", "NASAL" => "+", "VOICED" => "-"}],
-          ["ŋ",  {"VOWEL" => "-", "NASAL" => "+", "VOICED" => "+"}],
-          ["p",  {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "-"}],
-          ["s",  {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "-"}],
-          ["z",  {"VOWEL" => "-", "NASAL" => "-", "VOICED" => "+"}],
-          ["i",  {"VOWEL" => "+", "NASAL" => "-", "VOICED" => "+"}],
-          ["ʌ",  {"VOWEL" => "+", "NASAL" => "-", "VOICED" => "+"}]
+          ["dʒ", {:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}],
+          ["m",  {:VOWEL => :"-", :NASAL => :"+", :VOICED => :"-"}],
+          ["ŋ",  {:VOWEL => :"-", :NASAL => :"+", :VOICED => :"+"}],
+          ["p",  {:VOWEL => :"-", :NASAL => :"-", :VOICED => :"-"}],
+          ["s",  {:VOWEL => :"-", :NASAL => :"-", :VOICED => :"-"}],
+          ["z",  {:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}],
+          ["i",  {:VOWEL => :"+", :NASAL => :"-", :VOICED => :"+"}],
+          ["ʌ",  {:VOWEL => :"+", :NASAL => :"-", :VOICED => :"+"}]
         ]
       assert_equal(expected, PhoneticAlign::FormFeatureReader.new(@phones).collect)
     end
@@ -509,26 +517,41 @@ class WordListTestCase < Test::Unit::TestCase
       @phones, @words = jumps_sees
     end
 
-    should "be creatable from a word list and segment table" do
+    should "be creatable from a word list and phone table string" do
       word_list = PhoneticAlign::WordList.new(@words, @phones)
       transcriptions = ["dʒʌmp", "dʒʌmps", "dʒʌmpiŋ", "si", "siz", "siiŋ"]
       assert_equal(transcriptions, word_list.collect { |w| w.transcription })
       # jump is the first word in the list
       jump = word_list.first
       # Verify the semantic features of jump
-      assert_equal({"LEMMA" => "jump", "PERNUM" => "non-3sg", "ASPECT" => "perfect"}, jump.meaning)
+      assert_equal({:LEMMA => :jump, :PERNUM => :"non-3sg", :ASPECT => :perfect}, jump.meaning)
       # Verify segments on jump
       assert_equal([:dʒ, :ʌ, :m, :p], jump.phonetic_component.collect { |p| p.ipa })
       # Verify the phonetic featuers of the first segment in jump
       assert_equal({:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}, jump.phonetic_component.first.features)
     end
 
-    should "be creatable from a word list without a segment table" do
+    should "be creatable from a word list and a phone table" do
+      phone_table = PhoneticAlign::PhoneTable.new(@phones)
+      word_list = PhoneticAlign::WordList.new(@words, phone_table)
+      transcriptions = ["dʒʌmp", "dʒʌmps", "dʒʌmpiŋ", "si", "siz", "siiŋ"]
+      assert_equal(transcriptions, word_list.collect { |w| w.transcription })
+      # jump is the first word in the list
+      jump = word_list.first
+      # Verify the semantic features of jump
+      assert_equal({:LEMMA => :jump, :PERNUM => :"non-3sg", :ASPECT => :perfect}, jump.meaning)
+      # Verify segments on jump
+      assert_equal([:dʒ, :ʌ, :m, :p], jump.phonetic_component.collect { |p| p.ipa })
+      # Verify the phonetic featuers of the first segment in jump
+      assert_equal({:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}, jump.phonetic_component.first.features)
+    end
+
+    should "be creatable from a word list without a phone table" do
       word_list = PhoneticAlign::WordList.new(@words)
       transcriptions = ["dʒʌmp", "dʒʌmps", "dʒʌmpiŋ", "si", "siz", "siiŋ"]
       assert_equal(transcriptions, word_list.collect { |w| w.transcription })
       djump = word_list.first
-      assert_equal({"LEMMA" => "jump", "PERNUM" => "non-3sg", "ASPECT" => "perfect"}, djump.meaning)
+      assert_equal({:LEMMA => :jump, :PERNUM => :"non-3sg", :ASPECT => :perfect}, djump.meaning)
       djump_form = "dʒʌmp".split("").collect { |f| PhoneticAlign::Phone.new(f, {}) }
       assert_equal(djump_form, djump.phonetic_component)
     end
@@ -539,7 +562,7 @@ class WordListTestCase < Test::Unit::TestCase
       assert_raise(RuntimeError) { PhoneticAlign::WordList.new(@words, no_form_data) }
     end
 
-    should "raise an ArgumentError if a word contains a segment not in the segment table" do
+    should "raise an ArgumentError if a word contains a segment not in the phone table" do
       bad_phone_data = "FORM, LEMMA, PERNUM, ASPECT\ndʒʌXp,jump, non-3sg, perfect"
       assert_raise(ArgumentError) { PhoneticAlign::WordList.new(@words, bad_phone_data) }
     end
@@ -557,20 +580,14 @@ class WordListTestCase < Test::Unit::TestCase
 end
 
 
-# A version of PhoneticAlign::Alignment that allows direct manipulation of the
-# segment boundaries for testing purposes.
-class TestAlignment < PhoneticAlign::Alignment
-  attr_accessor :segment_boundaries
-end
-
-
 class AlignmentTestCase < Test::Unit::TestCase
-  context "The alignment algorithm" do
+  context "Alignments" do
     setup do
       words = happy_unhappy_unhappiness
       # All phones.
       @happy_p = words.happy_p
       @unhappy_p = words.unhappy_p
+      @unhappiness_p = words.unhappiness_p
       # Phones and morphemes.
       @unhappy_pm = words.unhappy_pm
       # All morphemes
@@ -618,23 +635,29 @@ class AlignmentTestCase < Test::Unit::TestCase
       assert_equal([:delete, :insert, :delete, nil, nil, nil, nil, nil], align.edit_operations)
     end
 
+    should "define a length function equal to the number of slots" do
+      @happy_unhappy = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
+      @happy_unhappiness = PhoneticAlign::Alignment.new(@happy_p, @unhappiness_p)
+      assert_equal(11, @happy_unhappiness.length)
+      assert_equal(7, @happy_unhappy.length)
+    end
+
   end
 
   context "Stringification of segmented alignments" do
     setup do
       words = happy_unhappy_unhappiness
-      @unhappy_unhappiness = TestAlignment.new(words.unhappy_p, words.unhappiness_p)
+      @unhappy_unhappiness = PhoneticAlign::Alignment.new(words.unhappy_p, words.unhappiness_p)
     end
 
     should "put vertical bars on the segment boundaries" do
-      @unhappy_unhappiness.segment_boundaries = [2, 7]
       expected =<<-EOTEXT
 un|happy|----
 un|happi|ness
   |    S|IIII
 0.5455
 EOTEXT
-      assert_equal(expected.strip, @unhappy_unhappiness.to_s)
+      assert_equal(expected.strip, @unhappy_unhappiness.to_s([2,7]))
     end
 
     should "not put vertical bars in unsegmented words" do
@@ -648,7 +671,6 @@ EOTEXT
     end
 
     should "optionally write carets under emphasized segments" do
-      @unhappy_unhappiness.segment_boundaries = [2, 7]
       first_segment =<<-EOTEXT
 un|happy|----
 un|happi|ness
@@ -656,8 +678,8 @@ un|happi|ness
 ^^|     |    
 0.5455
 EOTEXT
-      assert_equal(first_segment.strip, @unhappy_unhappiness.to_s(0),
-                   "#{first_segment.strip}\nnot\n#{@unhappy_unhappiness.to_s(0)}")
+      actual = @unhappy_unhappiness.to_s([2,7], [0,1])
+      assert_equal(first_segment.strip, actual, "#{first_segment.strip}\nnot\n#{actual}")
       middle_segment =<<-EOTEXT
 un|happy|----
 un|happi|ness
@@ -665,8 +687,8 @@ un|happi|ness
   |^^^^^|    
 0.5455
 EOTEXT
-      assert_equal(middle_segment.strip, @unhappy_unhappiness.to_s(1),
-                   "#{middle_segment.strip}\nnot\n#{@unhappy_unhappiness.to_s(1)}")
+      actual = @unhappy_unhappiness.to_s([2,7], [2,6])
+      assert_equal(middle_segment.strip, actual, "#{middle_segment.strip}\nnot\n#{actual}")
       last_segment =<<-EOTEXT
 un|happy|----
 un|happi|ness
@@ -674,69 +696,76 @@ un|happi|ness
   |     |^^^^
 0.5455
 EOTEXT
-      assert_equal(last_segment.strip, @unhappy_unhappiness.to_s(2),
-                   "#{last_segment.strip}\nnot\n#{@unhappy_unhappiness.to_s(2)}")
+      actual = @unhappy_unhappiness.to_s([2,7], [7, 10])
+      assert_equal(last_segment.strip, actual, "#{last_segment.strip}\nnot\n#{actual}")
     end
 
   end
 
-  context "Alignments" do
+end
+
+
+class SegementationTestCase < Test::Unit::TestCase
+
+  context "Segmentations" do
     setup do
       words = happy_unhappy_unhappiness
-      @happy_unhappy = TestAlignment.new(words.happy_p, words.unhappy_p)
-      @happy_unhappiness = TestAlignment.new(words.happy_p, words.unhappiness_p)
-    end
-
-    should "define a length function equal to the number of slots" do
-      assert_equal(11, @happy_unhappiness.length)
-      assert_equal(7, @happy_unhappy.length)
+      @happy_unhappy = PhoneticAlign::Alignment.new(words.happy_p, words.unhappy_p)
+      @happy_unhappiness = PhoneticAlign::Alignment.new(words.happy_p, words.unhappiness_p)
     end
 
     should "return segment ranges given segment indexes" do
-      @happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
+      segments = @happy_unhappiness.segmentation(0.5) # dist(i,y) <= 0.5
+      assert_equal(3, segments.length)
       # --|happy|----
       # un|happi|ness
       # II|    S|IIII
-      assert_equal([0,1], @happy_unhappiness.segment_range(0))
-      assert_equal([2,6], @happy_unhappiness.segment_range(1))
-      assert_equal([7,10], @happy_unhappiness.segment_range(2))
+      assert_equal(0, segments[0].from)
+      assert_equal(1, segments[0].to)
+      assert_equal(2, segments[1].from)
+      assert_equal(6, segments[1].to)
+      assert_equal(7, segments[2].from)
+      assert_equal(10, segments[2].to)
     end
 
     should "have phonetic operation lists that represent phone substitutions" do
-      @happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
+      segments = @happy_unhappiness.segmentation(0.5) # dist(i,y) <= 0.5
       # --|happy|----
       # un|happi|ness
       # II|    S|IIII
       # y <-> i is a substitution in the edit operations but a nil in the
       # phonetic operations.
       assert_equal([:insert]*2 + [nil]*4 + [:substitute] + [:insert]*4,
-                   @happy_unhappiness.edit_operations)
+                   segments.edit_operations)
       assert_equal([:insert]*2 + [nil]*5 + [:insert]*4,
-                   @happy_unhappiness.phonetic_operations)
+                   segments.phonetic_operations)
     end
 
     should "insert boundaries at edit operation discontinuities" do
-      @happy_unhappy.segment!
+      segments = @happy_unhappy.segmentation
       # --|happy
       # un|happy
       # II|
-      assert_equal([2], @happy_unhappy.segment_boundaries)
+      assert_equal(2, segments.length)
+      assert_equal([2], segments.segment_boundaries)
     end
 
     should "treat phone substitutions beneath a threshold as matching" do
-      @happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
+      segments = @happy_unhappiness.segmentation(0.5) # dist(i,y) <= 0.5
       # --|happy|----
       # un|happi|ness
       # II|    S|IIII
-      assert_equal([2, 7], @happy_unhappiness.segment_boundaries)
+      assert_equal(3, segments.length)
+      assert_equal([2, 7], segments.segment_boundaries)
     end
 
     should "not treat phone substitutions as matching if the distance is too large" do
-      @happy_unhappiness.segment!(0.2) # dist(i,y) > 0.5
+      segments = @happy_unhappiness.segmentation(0.2) # dist(i,y) > 0.5
       # --|happ|y|----
       # un|happ|i|ness
       # II|    |S|IIII
-      assert_equal([2, 6, 7], @happy_unhappiness.segment_boundaries)
+      assert_equal(4, segments.length)
+      assert_equal([2, 6, 7], segments.segment_boundaries)
     end
 
   end
@@ -748,12 +777,13 @@ class SegementTestCase < Test::Unit::TestCase
   context "Segments" do
     setup do
       words = happy_unhappy_unhappiness
-      happy_unhappiness = TestAlignment.new(words.happy_p, words.unhappiness_p)
+      @happy_p = words.happy_p
+      @unhappiness_p = words.unhappiness_p
+      happy_unhappiness = PhoneticAlign::Alignment.new(@happy_p, @unhappiness_p)
       # --|happy|----
       # un|happi|ness
       # II|    S|IIII
-      happy_unhappiness.segment!(0.5) # dist(i,y) <= 0.5
-      @segments = happy_unhappiness.segments
+      @segments = happy_unhappiness.segmentation(0.5) # dist(i,y) <= 0.5
     end
 
     should "have one more segment than there are segment boundaries" do
@@ -769,7 +799,7 @@ class SegementTestCase < Test::Unit::TestCase
                    "phonetically_same?\n#{@segments[2]}")
     end
 
-    should "be phonetically same if they have any non-nil phonetic edit operations" do
+    should "be phonetically different if they have any non-nil phonetic edit operations" do
       assert_equal(true, @segments[0].phonetically_different?,
                    "phonetically_different?\n#{@segments[0]}")
       assert_equal(false, @segments[1].phonetically_different?,
@@ -778,6 +808,97 @@ class SegementTestCase < Test::Unit::TestCase
                    "phonetically_different?\n#{@segments[0]}")
     end
 
+    should "make the phonetic component of each word available" do
+      # happy
+      assert_equal([nil] * 2, @segments[0].phonetic_component(:source))
+      assert_equal(@happy_p.phonetic_component, @segments[1].phonetic_component(:source))
+      assert_equal([nil] * 4, @segments[2].phonetic_component(:source))
+      # unhappiness
+      assert_equal(@unhappiness_p.phonetic_component[0..1], @segments[0].phonetic_component(:dest))
+      assert_equal(@unhappiness_p.phonetic_component[2..6], @segments[1].phonetic_component(:dest))
+      assert_equal(@unhappiness_p.phonetic_component[7..10], @segments[2].phonetic_component(:dest))
+    end
+    
+    should "not have a meaning if they do not consist of morphemes" do
+      # happy
+      assert_equal(nil, @segments[0].meaning(:source))
+      assert_equal(nil, @segments[1].meaning(:source))
+      assert_equal(nil, @segments[2].meaning(:source))
+      # unhappiness
+      assert_equal(nil, @segments[0].meaning(:dest))
+      assert_equal(nil, @segments[1].meaning(:dest))
+      assert_equal(nil, @segments[2].meaning(:dest))
+    end
+    
   end
 
+  context "Segments containing morphemes" do
+    setup do
+      words = happy_unhappy_unhappiness
+      @happy_m = words.happy_m
+      @unhappy_happi_ness_m = words.unhappy_happi_ness_m
+      @un_meaning = words.un_meaning
+      @happy_meaning = words.happy_meaning
+      @ness_meaning = words.ness_meaning
+      happy_unhappiness = PhoneticAlign::Alignment.new(@happy_m, @unhappy_happi_ness_m)
+      #  -          |        happy        |          -
+      # un          |     happi/happy     |        ness
+      #  I          |                     |          I
+      @segments = happy_unhappiness.segmentation
+    end
+
+    should "make their meanings available" do
+      assert_equal(3, @segments.length)
+      # happy
+      assert_equal(nil, @segments[0].meaning(:source))
+      assert_equal(@happy_meaning, @segments[1].meaning(:source))
+      assert_equal(nil, @segments[2].meaning(:source))
+      # unhappiness
+      assert_equal(@un_meaning, @segments[0].meaning(:dest))
+      assert_equal(@happy_meaning, @segments[1].meaning(:dest))
+      assert_equal(@ness_meaning, @segments[2].meaning(:dest))
+    end
+    
+  end
+
+end
+
+
+class CreeTestCase < Test::Unit::TestCase
+  
+  context "The Cree data" do
+    setup do
+      data_dir = File.join(File.dirname(__FILE__), "..", "data")
+      cree_phones = open(File.join(data_dir, "cree.phones")) do |file|
+        PhoneticAlign::PhoneTable.new(file)
+      end
+      @cree_words = open(File.join(data_dir, "cree.data")) do |file|
+        PhoneticAlign::WordList.new(file, cree_phones)
+      end
+      @atim = @cree_words.find { |w| w.transcription == "atim" }
+      @atimwak = @cree_words.find { |w| w.transcription == "atimwak" }
+      @atimwa = @cree_words.find { |w| w.transcription == "atimwa" }
+    end
+
+    should "contain the words atim, atimwak, and atimwa" do
+      assert_equal(PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog, :NUMBER => :singular, :DISTANCE => :proximate],
+                   @atim.meaning)
+      assert_equal(PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog, :NUMBER => :plural, :DISTANCE => :proximate],
+                  @atimwak.meaning)
+      assert_equal(PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog, :NUMBER => :singular, :DISTANCE => :obviate],
+                  @atimwa.meaning)
+    end
+    
+    should "segment atim and atimwak into the root atim and the suffix wak" do
+      # atim|---
+      # atim|wak
+      #     |III
+      atim_atimwak = PhoneticAlign::Alignment.new(@atim, @atimwak)
+      assert_in_delta(Rational(4,7), atim_atimwak.match_rate, 2 ** -20)
+      segments = atim_atimwak.segmentation
+      assert_equal(2, segments.length)
+    end
+    
+  end
+  
 end

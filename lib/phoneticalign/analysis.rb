@@ -43,9 +43,9 @@ module PhoneticAlign
     def best_morpheme_hypotheses(alignments)
       morpheme_hypotheses = {}
       alignments.each do |alignment|
-        alignment.segment!
-        alignment.each_morpheme_hypothesis do |morpheme_hypothesis|
-          # TODO Add the constraint to the list.
+        segmentation = alignment.segment
+        segmentation.each_morpheme_hypothesis do |morpheme_hypothesis|
+          # TODO Add the hypothesis to the list.
         end
       end
       # TODO Add up match rates by morpheme.
