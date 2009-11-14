@@ -872,7 +872,7 @@ class CreeTestCase < Test::Unit::TestCase
       cree_phones = open(File.join(data_dir, "cree.phones")) do |file|
         PhoneticAlign::PhoneTable.new(file)
       end
-      @cree_words = open(File.join(data_dir, "cree.data")) do |file|
+      @cree_words = open(File.join(data_dir, "cree.words")) do |file|
         PhoneticAlign::WordList.new(file, cree_phones)
       end
       @atim = @cree_words.find { |w| w.transcription == "atim" }
