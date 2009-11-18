@@ -43,11 +43,12 @@ module PhoneticAlign
       # Get morpheme hypotheses from alignments.
       morpheme_hypotheses = Hash.new {[]}
       alignments.each do |alignment|
-        LOGGER.debug("Align\n#{alignment}")
+        LOGGER.debug("Compare\n#{alignment.source_word}\n#{alignment.dest_word}")
+        # TODO Incorporate substitution threshold.
         segmentation = alignment.segmentation
         segmentation.each_morpheme_hypothesis do |morpheme_hypothesis|
           LOGGER.debug("Morpheme Hypothesis\n#{morpheme_hypothesis}")
-          p = morpheme_hypothesis.phonetic_component
+          p = morpheme_hypothesis.key
           # TODO Do allophones get the same hash key?
           morpheme_hypotheses[p] = morpheme_hypotheses[p] << morpheme_hypothesis
         end

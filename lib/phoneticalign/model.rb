@@ -10,6 +10,8 @@ module PhoneticAlign
   class FeatureValueMatrix < Hash
 
     # Create a feature matrix from a hash table.
+    #
+    # [_h_] hash table
     def FeatureValueMatrix.from_hash(h)
       FeatureValueMatrix[*h.to_a.flatten]
     end
@@ -69,6 +71,11 @@ module PhoneticAlign
     # A FeatureValueMatrix describing the phonetic features
     attr_reader :features
 
+    # Create a phone
+    #
+    # [_ipa_] IPA transcription of this phone
+    # [_features_] optional FeatureValueMatrix describing the phonetic
+    #              features
     def initialize(ipa, features = FeatureValueMatrix.new)
       @ipa = ipa
       @features = features
@@ -186,6 +193,10 @@ module PhoneticAlign
     # A FeatureValueMatrix representing the meaning
     attr_reader :meaning
 
+    # Create a word
+    #
+    # [<em>phonetic_component</em>] a sequence of Morpheme and Phone objects
+    # [_meaning_] a FeatureValueMatrix representing the word's meaning
     def initialize(phonetic_component, meaning)
       @phonetic_component = phonetic_component
       @meaning = meaning
@@ -521,7 +532,11 @@ module PhoneticAlign
   class Segment
     attr_reader :segmentation, :from, :to
 
+    # Creat a segment
+    #
     # [_segmentation_] segmentation in which this segment appears
+    # [_from_] the offset at which to begin the segment
+    # [_to_] the offset at which to end the segment
     def initialize(segmentation, from, to)
       @segmentation = segmentation
       @from = from
@@ -531,9 +546,11 @@ module PhoneticAlign
     # The alignment with this segmenent emphasized.
     def to_s
       segmentation.alignment.to_s(segmentation.segment_boundaries,
-                                  [@from, @to])
+                                  [from, to])
     end
 
+    # Segments are equal if they come from the same segmentation and have the
+    # same offsets.
     def ==(other)
       segmentation == other.segmentation and
       from == other.from and to == other.to
@@ -541,7 +558,7 @@ module PhoneticAlign
 
     # Is this segment phonetically the same in both words?
     def phonetically_same?
-      segmentation.phonetic_operations[@from..@to].all? {|op| op.nil?}
+      segmentation.phonetic_operations[from..to].all? {|op| op.nil?}
     end
 
     # Is this segment phonetically different in the two words?
@@ -576,7 +593,7 @@ module PhoneticAlign
     def phonetic_component(word)
       word = word == :source ? segmentation.source_alignment :
                                segmentation.dest_alignment
-      word[@from..@to]
+      word[from..to]
     end
 
     # Send unhandled calls down to the segmentation.
@@ -591,15 +608,19 @@ module PhoneticAlign
   class MorphemeHypothesis
     attr_reader :meaning
 
-    # [_segment_] Segment
-    # [_word_] :source or :dest
-    # [_meaning_] FeatureValueMatrix
+    # Create a morpheme hypothesis
+    #
+    # [_segment_] Segment from which the hypothesis is taken
+    # [_word_] word from which this is taken: :source or :dest
+    # [_meaning_] FeatureValueMatrix representing the morpheme's meaning
     def initialize(segment, word, meaning)
       @segment = segment
       @word = word
       @meaning = meaning
     end
     
+    # The alignment with the segment emphasized and an arrow pointing at the
+    # word.
     def to_s
       segment_lines = @segment.to_s.split("\n")
       segment_lines[@word == :source ? 0 : 1] += " <=="
@@ -614,12 +635,22 @@ module PhoneticAlign
       meaning == other.meaning
     end
     
+    # The phonetic component of this morpheme hypothesis.
+    #
+    # This returns a sequences of phones or morphemes.
     def phonetic_component
       @segment.phonetic_component(@word)
     end
     
+    # The transcription of the phonetic component
     def transcription
       phonetic_component.collect { |p| p.transcription }.join("")
+    end
+    
+    # Return an index of this hypothesis' phonetic component that can be used
+    # as a key in a hash table.
+    def key
+      MorphemeHypothesisPhoneticKey.new(phonetic_component)
     end
     
     # Send unhandled calls down to the segment.
@@ -628,5 +659,48 @@ module PhoneticAlign
     end
 
   end
+
+
+  # A representation of the phonetic component of a morpheme hypothesis that
+  # can be used as a key in a hash table.
+  #
+  # This is the phonetic component with the hash and eql? operators defined to
+  # work on the string representation.
+  class MorphemeHypothesisPhoneticKey
+    #--
+    # These objects are used as keys when we build the morpheme_hypotheses
+    # hash in MorphologicalAnalysis.best_morpheme_hypotheses.  The phonetic
+    # components by themselves will sometimes have different hashes for the
+    # same string of phones.
+    #
+    # This is mysterious to me.  I would expect the same sequence of phones to
+    # have to same hash. What's more, I was able to generate this bug when
+    # running analyze-morphemes, but I was not able to reproduce it in the
+    # test scripts.
+    #
+    # The use of this class is a workaround for this problem.
+    #++
+    
+    # Create a phonetic key
+    #
+    # [<em>phonetic_component</em>] the phonetic component of a morpheme
+    #                               hypothesis
+    def initialize(phonetic_component)
+      @phonetic_component = phonetic_component
+    end
+
+    def to_s
+      @phonetic_component.to_s
+    end
+    
+    def eql?(other)
+      to_s == other.to_s
+    end
+    
+    def hash
+      to_s.hash
+    end
+  end
+
 
 end

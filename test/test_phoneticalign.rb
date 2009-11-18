@@ -47,25 +47,22 @@ def happy_unhappy_unhappiness
   EOTEXT
   phone_table = PhoneticAlign::PhoneTable.new(happy_unhappy_phones)
   # Phonetic sequences
-  un_phones = phone_table.phone_sequence("un")
-  happy_phones = phone_table.phone_sequence("happy")
-  happi_phones = phone_table.phone_sequence("happi")
-  ness_phones = phone_table.phone_sequence("ness")
   # Meanings
   un_meaning = PhoneticAlign::FeatureValueMatrix[:POL => :neg]
   happy_meaning = PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy]
   ness_meaning = PhoneticAlign::FeatureValueMatrix[:POS => :noun]
   # Morphemes
-  un_morph = PhoneticAlign::Morpheme.new([un_phones], un_meaning)
-  happy_morph = PhoneticAlign::Morpheme.new([happy_phones], happy_meaning)
-  happy_happi_morph = PhoneticAlign::Morpheme.new([happy_phones, happi_phones], happy_meaning)
-  ness_morph = PhoneticAlign::Morpheme.new([ness_phones], ness_meaning)
+  un_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("un")], un_meaning)
+  happy_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("happy")], happy_meaning)
+  happy_happi_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("happy"),
+                                                   phone_table.phone_sequence("happi")], happy_meaning)
+  ness_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("ness")], ness_meaning)
   # Words consisting of all phones.
-  happy_p = PhoneticAlign::Word.new(happy_phones, happy_meaning)
-  unhappy_p = PhoneticAlign::Word.new(un_phones + happy_phones, un_meaning + happy_meaning)
-  unhappiness_p = PhoneticAlign::Word.new(un_phones + happi_phones + ness_phones, un_meaning + happy_meaning + ness_meaning)
+  happy_p = PhoneticAlign::Word.new(phone_table.phone_sequence("happy"), happy_meaning)
+  unhappy_p = PhoneticAlign::Word.new(phone_table.phone_sequence("unhappy"), un_meaning + happy_meaning)
+  unhappiness_p = PhoneticAlign::Word.new(phone_table.phone_sequence("unhappiness"), un_meaning + happy_meaning + ness_meaning)
   # Words consisting of phones and morphemes.
-  unhappy_pm = PhoneticAlign::Word.new([un_morph] + happy_phones, un_meaning + happy_meaning)
+  unhappy_pm = PhoneticAlign::Word.new([un_morph] + phone_table.phone_sequence("happy"), un_meaning + happy_meaning)
   # Words consisting of all morphemes
   happy_m = PhoneticAlign::Word.new([happy_morph], happy_meaning)
   unhappy_m = PhoneticAlign::Word.new([un_morph, happy_morph], un_meaning + happy_meaning)
@@ -526,7 +523,7 @@ class WordListTestCase < Test::Unit::TestCase
       # Verify the semantic features of jump
       assert_equal({:LEMMA => :jump, :PERNUM => :"non-3sg", :ASPECT => :perfect}, jump.meaning)
       # Verify segments on jump
-      assert_equal([:dʒ, :ʌ, :m, :p], jump.phonetic_component.collect { |p| p.ipa })
+      assert_equal(["dʒ".to_sym, "ʌ".to_sym, :m, :p], jump.phonetic_component.collect { |p| p.ipa })
       # Verify the phonetic featuers of the first segment in jump
       assert_equal({:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}, jump.phonetic_component.first.features)
     end
@@ -541,7 +538,7 @@ class WordListTestCase < Test::Unit::TestCase
       # Verify the semantic features of jump
       assert_equal({:LEMMA => :jump, :PERNUM => :"non-3sg", :ASPECT => :perfect}, jump.meaning)
       # Verify segments on jump
-      assert_equal([:dʒ, :ʌ, :m, :p], jump.phonetic_component.collect { |p| p.ipa })
+      assert_equal(["dʒ".to_sym, "ʌ".to_sym, :m, :p], jump.phonetic_component.collect { |p| p.ipa })
       # Verify the phonetic featuers of the first segment in jump
       assert_equal({:VOWEL => :"-", :NASAL => :"-", :VOICED => :"+"}, jump.phonetic_component.first.features)
     end
@@ -909,6 +906,75 @@ EOTEXT
 end
 
 
+class MorphemeHypothesisTestCase < Test::Unit::TestCase
+  context "Morpheme hypotheses" do
+    setup do
+      words = happy_unhappy_unhappiness
+      happy_unhappy = PhoneticAlign::Alignment.new(words.happy_p, words.unhappy_p).segmentation(0.5) # dist(i,y) <= 0.5
+      happy_unhappiness = PhoneticAlign::Alignment.new(words.happy_p, words.unhappiness_p).segmentation(0.5) # dist(i,y) <= 0.5
+      @happy1 = PhoneticAlign::MorphemeHypothesis.new(happy_unhappy[1], :source, words.happy_meaning)
+      @happy2 = PhoneticAlign::MorphemeHypothesis.new(happy_unhappiness[1], :source, words.happy_meaning)
+      @happi = PhoneticAlign::MorphemeHypothesis.new(happy_unhappiness[1], :dest, words.happy_meaning)
+    end
+
+    should "should have equal phonetic components iff the components contain the same phones" do
+      happy1 = @happy1.phonetic_component
+      happy2 = @happy2.phonetic_component
+      happi = @happi.phonetic_component
+      assert_equal(happy1, happy2)
+      assert_not_equal(happy1, happi)
+      assert_not_equal(happy2, happi)
+    end
+    
+    should "be indexable in a hash by their index" do
+      actual = Hash.new {[]}
+      actual[@happy1.key] = actual[@happy1.key] << @happy1
+      actual[@happy2.key] = actual[@happy2.key] << @happy2
+      actual[@happi.key] = actual[@happi.key] << @happi
+      expected = {
+                    @happy1.key => [@happy1, @happy2],
+                    @happi.key => [@happi],
+      }
+      assert_equal(expected, actual)
+    end
+    
+    should "be equal if they have the same phonetic component and meaning (even if they come from different words)" do
+      assert_equal(@happy1, @happy2)
+    end
+    
+    should "provide a transcription of their phonetic component" do
+      assert_equal("happy", @happy1.transcription)
+      assert_equal("happy", @happy2.transcription)
+      assert_equal("happi", @happi.transcription)
+    end
+    
+    should "stringify with their segment emphasized and an arrow pointing at the word" do
+      expected = <<-EOTEXT
+happy
+[LEMMA = happy]
+--|happy <==
+un|happy
+II|     
+  |^^^^^
+0.7143
+EOTEXT
+      assert_equal(expected.strip, @happy1.to_s)
+      expected = <<-EOTEXT
+happi
+[LEMMA = happy]
+--|happy|----
+un|happi|ness <==
+II|    S|IIII
+  |^^^^^|    
+0.3636
+EOTEXT
+      assert_equal(expected.strip, @happi.to_s)
+    end
+  end
+
+end
+
+
 class CreeTestCase < Test::Unit::TestCase
   
   context "The first iteration over the Cree data" do
@@ -1090,3 +1156,4 @@ class CreeTestCase < Test::Unit::TestCase
   end
   
 end
+
