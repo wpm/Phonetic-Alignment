@@ -34,23 +34,28 @@ module PhoneticAlign
           next
         end
         alignment = Alignment.new(w1, w2)
-        LOGGER.debug("Align\n#{alignment}")
         alignments << alignment
       end
       alignments
     end
 
     def best_morpheme_hypotheses(alignments)
-      morpheme_hypotheses = {}
+      # Get morpheme hypotheses from alignments.
+      morpheme_hypotheses = Hash.new {[]}
       alignments.each do |alignment|
-        segmentation = alignment.segment
+        LOGGER.debug("Align\n#{alignment}")
+        segmentation = alignment.segmentation
         segmentation.each_morpheme_hypothesis do |morpheme_hypothesis|
-          # TODO Add the hypothesis to the list.
+          LOGGER.debug("Morpheme Hypothesis\n#{morpheme_hypothesis}")
+          p = morpheme_hypothesis.phonetic_component
+          # TODO Do allophones get the same hash key?
+          morpheme_hypotheses[p] = morpheme_hypotheses[p] << morpheme_hypothesis
         end
       end
-      # TODO Take intersection of meaning for hypotheses of the same word segment.
+      # TODO Create equivalance classes of morpheme hypotheses based on phonetic component.
+      # TODO For each phonetic equivalence classs, take intersection of meaning for hypotheses.
       # TODO Add up match rates by morpheme.
-      # TODO Return high ranked morpheme hypotheses.
+      # TODO Return highest-ranked morpheme hypotheses.
       morpheme_hypotheses
     end
 

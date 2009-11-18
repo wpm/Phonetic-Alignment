@@ -30,7 +30,14 @@ module AnalyzeMorphemes
 
     # Do analysis.
     alignments = analysis.align_words
-    puts alignments.sort_by {|a| a.match_rate}.map {|a| a.to_s}.join("\n\n")
+    morpheme_hypotheses = analysis.best_morpheme_hypotheses(alignments)
+    morpheme_hypotheses.each_key do |p|
+      hyps = morpheme_hypotheses[p]
+      puts hyps.first.transcription
+      puts "-" * hyps.first.transcription.length
+      puts hyps.join("\n")
+      puts
+    end
   end
 
   # Get parameters from the command line and configuration files.

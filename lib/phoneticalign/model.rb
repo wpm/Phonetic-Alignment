@@ -579,6 +579,11 @@ module PhoneticAlign
       word[@from..@to]
     end
 
+    # Send unhandled calls down to the segmentation.
+    def method_missing(method, *args)
+      segmentation.send(method, *args)
+    end
+
   end
 
 
@@ -599,7 +604,7 @@ module PhoneticAlign
       segment_lines = @segment.to_s.split("\n")
       segment_lines[@word == :source ? 0 : 1] += " <=="
       segment_s = segment_lines.join("\n")
-      "#{segment_s}\n#{@meaning}"
+      "#{transcription}\n#{@meaning}\n#{segment_s}"
     end
     
     # Two morpheme hypotheses are equal if they have the same phonetic
@@ -613,6 +618,15 @@ module PhoneticAlign
       @segment.phonetic_component(@word)
     end
     
+    def transcription
+      phonetic_component.collect { |p| p.transcription }.join("")
+    end
+    
+    # Send unhandled calls down to the segment.
+    def method_missing(method, *args)
+      @segment.send(method, *args)
+    end
+
   end
 
 end

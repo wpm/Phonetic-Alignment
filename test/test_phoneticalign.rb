@@ -950,24 +950,27 @@ class CreeTestCase < Test::Unit::TestCase
       assert(segments[0].phonetically_same?)
       assert(segments[1].phonetically_different?)
       # Morpheme hypotheses
+      # wak
+      # [NUMBER = plural]
       # atim|---
       # atim|wak <==
       #     |III
       #     |^^^
       # 0.5714
-      # [NUMBER = plural]
+      # atim
+      # [DISTANCE = proximate, LEMMA = dog]
       # atim|--- <==
       # atim|wak
       #     |III
       # ^^^^|   
       # 0.5714
+      # atim
       # [DISTANCE = proximate, LEMMA = dog]
       # atim|---
       # atim|wak <==
       #     |III
       # ^^^^|   
       # 0.5714
-      # [DISTANCE = proximate, LEMMA = dog]
       morpheme_hyps = []
       segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
       assert_equal(3, morpheme_hyps.length)
@@ -997,24 +1000,27 @@ class CreeTestCase < Test::Unit::TestCase
       assert(segments[0].phonetically_same?)
       assert(segments[1].phonetically_different?)
       # Morpheme hypotheses
+      # wa
+      # [DISTANCE = obviate]
       # atim|--
       # atim|wa <==
       #     |II
       #     |^^
       # 0.6667
-      # [DISTANCE = obviate]
+      # atim
+      # [LEMMA = dog, NUMBER = singular]
       # atim|-- <==
       # atim|wa
       #     |II
       # ^^^^|  
       # 0.6667
+      # atim
       # [LEMMA = dog, NUMBER = singular]
       # atim|--
       # atim|wa <==
       #     |II
       # ^^^^|  
       # 0.6667
-      # [LEMMA = dog, NUMBER = singular]
       morpheme_hyps = []
       segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
       assert_equal(3, morpheme_hyps.length)
@@ -1045,24 +1051,27 @@ class CreeTestCase < Test::Unit::TestCase
       assert(segments[0].phonetically_same?)
       assert(segments[1].phonetically_different?)
       # Morpheme hypotheses
+      # k
+      # [DISTANCE = proximate, NUMBER = plural]
       # atimwa|-
       # atimwa|k <==
       #       |I
       #       |^
       # 0.8571
-      # [DISTANCE = proximate, NUMBER = plural]
+      # atimwa
+      # [LEMMA = dog]
       # atimwa|- <==
       # atimwa|k
       #       |I
       # ^^^^^^| 
       # 0.8571
+      # atimwa
       # [LEMMA = dog]
       # atimwa|-
       # atimwa|k <==
       #       |I
       # ^^^^^^| 
       # 0.8571
-      # [LEMMA = dog]
       morpheme_hyps = []
       segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
       assert_equal(3, morpheme_hyps.length)
