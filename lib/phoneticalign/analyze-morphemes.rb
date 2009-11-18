@@ -7,6 +7,9 @@ module AnalyzeMorphemes
   def AnalyzeMorphemes.main(stdout, arguments = [])
     # Get parameters from the command line and configuration files.
     parameters = get_parameters
+    if parameters.has_key?(:logging)
+      PhoneticAlign.set_log_level(eval("Logger::#{parameters[:logging]}"))
+    end
     PhoneticAlign::LOGGER.debug("Parameters\n#{parameters}")
 
     parser.exit_error("Words file not specified") \
@@ -31,6 +34,7 @@ module AnalyzeMorphemes
     # Do analysis.
     alignments = analysis.align_words
     morpheme_hypotheses = analysis.best_morpheme_hypotheses(alignments)
+    # Print morpheme hypotheses grouped by phonetic component.
     morpheme_hypotheses.each_key do |p|
       hyps = morpheme_hypotheses[p]
       puts hyps.first.transcription
@@ -69,9 +73,6 @@ module AnalyzeMorphemes
 
     # Incorporate options into the parameters.
     parameters.merge_config_file!(config) if not config.nil?
-    if parameters.has_key?(:logging)
-      PhoneticAlign.set_log_level(eval("Logger::#{parameters[:logging]}"))
-    end
 
     # Incorporate positional arguments into the parameters.
     parameters[:words] = ARGV[0] if not ARGV[0].nil?
