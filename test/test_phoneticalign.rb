@@ -728,6 +728,20 @@ class SegementationTestCase < Test::Unit::TestCase
       assert_equal(10, segments[2].to)
     end
 
+    should "access segments either by [] or enumeration" do
+      segmentation = @happy_unhappiness.segmentation(0.5) # dist(i,y) <= 0.5
+      segments = segmentation.collect
+      assert_equal(segments[0], segmentation[0])
+      assert_equal(segments[1], segmentation[1])
+      assert_equal(segments[2], segmentation[2])
+    end
+
+    should "be equal if they are from the same alignment and have the same boundaries" do
+      segmentation1 = @happy_unhappiness.segmentation(0.5) # dist(i,y) <= 0.5
+      segmentation2 = @happy_unhappiness.segmentation(0.6) # dist(i,y) <= 0.6
+      assert_equal(segmentation1, segmentation2)
+    end
+
     should "have phonetic operation lists that represent phone substitutions" do
       segments = @happy_unhappiness.segmentation(0.5) # dist(i,y) <= 0.5
       # --|happy|----
@@ -790,6 +804,11 @@ class SegementTestCase < Test::Unit::TestCase
       assert_equal(3, @segments.length)
     end
 
+    should "be equal if and only if they have the same alignment and to and from offsets" do
+      assert_equal(@segments[0], @segments[0])
+      assert_not_equal(@segments[0], @segments[1])
+    end
+
     should "be phonetically same if they have all nil phonetic edit operations" do
       assert_equal(false, @segments[0].phonetically_same?,
                    "phonetically_same?\n#{@segments[0]}")
@@ -830,6 +849,32 @@ class SegementTestCase < Test::Unit::TestCase
       assert_equal(nil, @segments[2].meaning(:dest))
     end
     
+    should "stringify with the segment emphasized" do
+      expected =<<-EOTEXT
+--|happy|----
+un|happi|ness
+II|    S|IIII
+^^|     |    
+0.3636
+EOTEXT
+      assert_equal(expected.strip, @segments[0].to_s, "Expected\n#{expected}\nbut got\n#{@segments[0]}")
+            expected =<<-EOTEXT
+--|happy|----
+un|happi|ness
+II|    S|IIII
+  |^^^^^|    
+0.3636
+EOTEXT
+      assert_equal(expected.strip, @segments[1].to_s, "Expected\n#{expected}\nbut got\n#{@segments[1]}")
+      expected =<<-EOTEXT
+--|happy|----
+un|happi|ness
+II|    S|IIII
+  |     |^^^^
+0.3636
+EOTEXT
+      assert_equal(expected.strip, @segments[2].to_s, "Expected\n#{expected}\nbut got\n#{@segments[2]}")
+    end
   end
 
   context "Segments containing morphemes" do
@@ -866,7 +911,7 @@ end
 
 class CreeTestCase < Test::Unit::TestCase
   
-  context "The Cree data" do
+  context "The first iteration over the Cree data" do
     setup do
       data_dir = File.join(File.dirname(__FILE__), "..", "data")
       cree_phones = open(File.join(data_dir, "cree.phones")) do |file|
@@ -880,25 +925,159 @@ class CreeTestCase < Test::Unit::TestCase
       @atimwa = @cree_words.find { |w| w.transcription == "atimwa" }
     end
 
-    should "contain the words atim, atimwak, and atimwa" do
+    should "have atim, atimwak, and atimwa in the word list" do
+      assert_instance_of(PhoneticAlign::Word, @atim)
       assert_equal(PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog, :NUMBER => :singular, :DISTANCE => :proximate],
                    @atim.meaning)
+      assert_instance_of(PhoneticAlign::Word, @atimwak)
       assert_equal(PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog, :NUMBER => :plural, :DISTANCE => :proximate],
                   @atimwak.meaning)
       assert_equal(PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog, :NUMBER => :singular, :DISTANCE => :obviate],
                   @atimwa.meaning)
+      assert_instance_of(PhoneticAlign::Word, @atimwa)
     end
     
-    should "segment atim and atimwak into the root atim and the suffix wak" do
-      # atim|---
-      # atim|wak
-      #     |III
+    should "get morpheme hypotheses for atim and wak from the atim/atimwak alignment" do
+      # Alignment
       atim_atimwak = PhoneticAlign::Alignment.new(@atim, @atimwak)
       assert_in_delta(Rational(4,7), atim_atimwak.match_rate, 2 ** -20)
       segments = atim_atimwak.segmentation
+      # Segmentation
+      # atim|---
+      # atim|wak
+      #     |III
       assert_equal(2, segments.length)
+      assert(segments[0].phonetically_same?)
+      assert(segments[1].phonetically_different?)
+      # Morpheme hypotheses
+      # atim|---
+      # atim|wak <==
+      #     |III
+      #     |^^^
+      # 0.5714
+      # [NUMBER = plural]
+      # atim|--- <==
+      # atim|wak
+      #     |III
+      # ^^^^|   
+      # 0.5714
+      # [DISTANCE = proximate, LEMMA = dog]
+      # atim|---
+      # atim|wak <==
+      #     |III
+      # ^^^^|   
+      # 0.5714
+      # [DISTANCE = proximate, LEMMA = dog]
+      morpheme_hyps = []
+      segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
+      assert_equal(3, morpheme_hyps.length)
+      wak_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest,
+                  PhoneticAlign::FeatureValueMatrix[:NUMBER => :plural])
+      assert_equal(wak_hyp, morpheme_hyps[0])
+      atim_source_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source,
+                  PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                    :DISTANCE => :proximate])
+      assert_equal(atim_source_hyp, morpheme_hyps[1])
+      atim_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest,
+                  PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                    :DISTANCE => :proximate])
+      assert_equal(atim_dest_hyp, morpheme_hyps[2])
     end
-    
+
+    should "get morpheme hypotheses for atim and wa from the atim/atimwa alignment" do
+      # Alignment
+      # atim|--
+      # atim|wa
+      #     |II
+      atim_atimwa = PhoneticAlign::Alignment.new(@atim, @atimwa)
+      assert_in_delta(Rational(4,6), atim_atimwa.match_rate, 2 ** -20)
+      segments = atim_atimwa.segmentation
+      # Segmentation
+      assert_equal(2, segments.length)
+      assert(segments[0].phonetically_same?)
+      assert(segments[1].phonetically_different?)
+      # Morpheme hypotheses
+      # atim|--
+      # atim|wa <==
+      #     |II
+      #     |^^
+      # 0.6667
+      # [DISTANCE = obviate]
+      # atim|-- <==
+      # atim|wa
+      #     |II
+      # ^^^^|  
+      # 0.6667
+      # [LEMMA = dog, NUMBER = singular]
+      # atim|--
+      # atim|wa <==
+      #     |II
+      # ^^^^|  
+      # 0.6667
+      # [LEMMA = dog, NUMBER = singular]
+      morpheme_hyps = []
+      segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
+      assert_equal(3, morpheme_hyps.length)
+      wak_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest,
+                  PhoneticAlign::FeatureValueMatrix[:DISTANCE => :obviate])
+      assert_equal(wak_hyp, morpheme_hyps[0])
+      atim_source_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source,
+                  PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                    :NUMBER => :singular])
+      assert_equal(atim_source_hyp, morpheme_hyps[1])
+      atim_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest,
+                  PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                    :NUMBER => :singular])
+      assert_equal(atim_dest_hyp, morpheme_hyps[2])
+    end
+
+    should "get morpheme hypotheses for atimwa and k from the atimwa/atimwak alignment" do
+      # Alignment
+      atimwa_atimwak = PhoneticAlign::Alignment.new(@atimwa, @atimwak)
+      assert_in_delta(Rational(6,7), atimwa_atimwak.match_rate, 2 ** -20)
+      segments = atimwa_atimwak.segmentation
+      # Segmentation
+      # atimwa|
+      # atimwa|k
+      #       |I
+      # 0.8571
+      assert_equal(2, segments.length)
+      assert(segments[0].phonetically_same?)
+      assert(segments[1].phonetically_different?)
+      # Morpheme hypotheses
+      # atimwa|-
+      # atimwa|k <==
+      #       |I
+      #       |^
+      # 0.8571
+      # [DISTANCE = proximate, NUMBER = plural]
+      # atimwa|- <==
+      # atimwa|k
+      #       |I
+      # ^^^^^^| 
+      # 0.8571
+      # [LEMMA = dog]
+      # atimwa|-
+      # atimwa|k <==
+      #       |I
+      # ^^^^^^| 
+      # 0.8571
+      # [LEMMA = dog]
+      morpheme_hyps = []
+      segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
+      assert_equal(3, morpheme_hyps.length)
+      k_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest,
+                  PhoneticAlign::FeatureValueMatrix[:NUMBER => :plural,
+                                                    :DISTANCE => :proximate])
+      assert_equal(k_hyp, morpheme_hyps[0])
+      atimwa_source_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source,
+                  PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog])
+      assert_equal(atimwa_source_hyp, morpheme_hyps[1])
+      atimwa_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest,
+                  PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog])
+      assert_equal(atimwa_dest_hyp, morpheme_hyps[2])
+    end
+
   end
   
 end

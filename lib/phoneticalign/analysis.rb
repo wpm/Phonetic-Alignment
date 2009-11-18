@@ -48,6 +48,7 @@ module PhoneticAlign
           # TODO Add the hypothesis to the list.
         end
       end
+      # TODO Take intersection of meaning for hypotheses of the same word segment.
       # TODO Add up match rates by morpheme.
       # TODO Return high ranked morpheme hypotheses.
       morpheme_hypotheses

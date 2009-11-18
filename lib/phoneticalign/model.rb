@@ -1,6 +1,7 @@
 require "editalign"
 require "set"
 
+
 module PhoneticAlign
 
   # A pairing of features and values.
@@ -229,11 +230,15 @@ module PhoneticAlign
   class Alignment < EditAlign::Alignment
     @@INFINITY = 1.0/0
 
+    attr_reader :source_word, :dest_word
+
     # Align two Word objects
     #
     # [_source_] word to align
     # [_dest_] word to align
     def initialize(source, dest)
+      @source_word = source
+      @dest_word = dest
       super(source.phonetic_component.clone, dest.phonetic_component.clone)
     end
 
@@ -363,7 +368,10 @@ module PhoneticAlign
   end
 
 
+  # A division of an Alignment into contiguous segments.
   class Segmentation
+    include Enumerable
+
     attr_reader :alignment, :segment_boundaries
 
     # Divide an alignment into segments
@@ -396,6 +404,13 @@ module PhoneticAlign
       segment_boundaries.length + 1
     end
 
+    # Two segmentations are equal if they come from the same alignment and
+    # have the same segment boundaries.
+    def ==(other)
+      alignment == other.alignment and
+      segment_boundaries == other.segment_boundaries
+    end
+
     # Return the specified segment.
     #
     # [_index_] segment index
@@ -406,28 +421,71 @@ module PhoneticAlign
       Segment.new(self, from, to)
     end
 
-    def method_missing(method, *args)
-      @alignment.send(method, *args)
+    # Enumerate segments in order.
+    def each
+      boundaries = [0] + segment_boundaries + [alignment.length]
+      boundaries.each_cons(2) do |from, to|
+        yield Segment.new(self, from, to-1)
+      end
     end
 
+    # Enumerate morpheme hypotheses
     def each_morpheme_hypothesis
-      segs = segments
-      different_segments.segs.find_all {|s| s.phonetically_different?}
-      same_segments.segs.find_all {|s| s.phonetically_same?}
+      different_segments = find_all {|s| s.phonetically_different?}
+      same_segments = find_all {|s| s.phonetically_same?}
+      # If only one of the alignment segments is phonetically different,
+      # hypothesize the difference of the word meanings for the corresponding
+      # word segments.
       if different_segments.length == 1
-        # Only one segment is different.
-        yield MorphemeHypothesis.new(segment, :source,
-                                     @source.meaning - @dest.meaning)
-        yield MorphemeHypothesis.new(segment, :dest,
-                                     @dest.meaning - @source.meaning)
-      elsif same_segments.length == 1
-        # Only one segment is the same.
-        shared_meaning = @source.meaning & @dest.meaning
-        segment = same_segments.first
-        yield MorphemeHypothesis.new(segment, :source, shared_meaning)
-        yield MorphemeHypothesis.new(segment, :dest, shared_meaning)
+        different_segment = different_segments.first
+        if not different_segment.phonetically_empty?(:source)
+          yield MorphemeHypothesis.new(different_segment, :source,
+                                       source_word.meaning - 
+                                       dest_word.meaning)
+        end
+        if not different_segment.phonetically_empty?(:dest)
+          yield MorphemeHypothesis.new(different_segment, :dest,
+                                       dest_word.meaning - 
+                                       source_word.meaning)
+        end
       end
-      # TODO Make morpheme vs. phoneme distinction for segments.
+      # If only one of the alignment segments is the same, hypothesize the
+      # intersection of the word meanings for both of the corresponding word
+      # segments.
+      if same_segments.length == 1
+        segment = same_segments.first
+        shared_meaning = source_word.meaning & dest_word.meaning
+        same_segment = same_segments.first
+        yield MorphemeHypothesis.new(same_segment, :source, shared_meaning)
+        yield MorphemeHypothesis.new(same_segment, :dest, shared_meaning)
+      end
+      # If a given word has only one phonetic segment, hypothesize that its
+      # meaning is the word meaning minus the meaning of all other morphemes
+      # in the word.
+      [:source, :dest].each do |word|
+        # Divide the phonetic component into phone sequences and meanings.
+        phone_sequences = []
+        meanings = []
+        each do |segment|
+          meaning = segment.meaning(word)
+          if meaning.nil?
+            phone_sequences << segment
+          else
+            meanings << meaning
+          end
+        end
+        # If we have a single phone sequence, hypothesize a meaning for it.
+        if phone_sequences.length == 1
+          morpheme_meaning = 
+          meanings.inject(FeatureValueMatrix.new) do |memo, meaning|
+            memo += meaning
+          end
+          word_meaning = word == :source ? source_word.meaning : 
+                                           dest_word.meaning
+          meaning = word_meaning - morpheme_meaning
+          yield MorphemeHypothesis.new(phone_sequences.first, word, meaning)
+        end
+      end
     end
 
     # Phonetic edit operations
@@ -451,12 +509,17 @@ module PhoneticAlign
       ops
     end
 
+    # Send unhandled calls down to the alignment.
+    def method_missing(method, *args)
+      @alignment.send(method, *args)
+    end
+
   end
 
 
   # A segment is a contiguous portion of an alignment.
   class Segment
-    attr_reader :from, :to
+    attr_reader :segmentation, :from, :to
 
     # [_segmentation_] segmentation in which this segment appears
     def initialize(segmentation, from, to)
@@ -467,18 +530,30 @@ module PhoneticAlign
 
     # The alignment with this segmenent emphasized.
     def to_s
-      @segmentation.alignment.to_s(@segmentation.segment_boundaries,
-                                   [@from, @to])
+      segmentation.alignment.to_s(segmentation.segment_boundaries,
+                                  [@from, @to])
+    end
+
+    def ==(other)
+      segmentation == other.segmentation and
+      from == other.from and to == other.to
     end
 
     # Is this segment phonetically the same in both words?
     def phonetically_same?
-      @segmentation.phonetic_operations[@from..@to].all? {|op| op.nil?}
+      segmentation.phonetic_operations[@from..@to].all? {|op| op.nil?}
     end
 
     # Is this segment phonetically different in the two words?
     def phonetically_different?
       not phonetically_same?
+    end
+
+    # Is this segment phonetically empty in the specified word?
+    #
+    # [_word_] :source or :dest
+    def phonetically_empty?(word)
+      phonetic_component(word).all? {|item| item.nil?}
     end
 
     # The meaning of the aligned word portion in this segment.
@@ -499,15 +574,18 @@ module PhoneticAlign
     #
     # [_word_] :source or :dest
     def phonetic_component(word)
-      word = word == :source ? @segmentation.source_alignment :
-                               @segmentation.dest_alignment
+      word = word == :source ? segmentation.source_alignment :
+                               segmentation.dest_alignment
       word[@from..@to]
     end
 
   end
 
 
+  # A pairing of a meaning with a word segment in an alignment.
   class MorphemeHypothesis
+    attr_reader :meaning
+
     # [_segment_] Segment
     # [_word_] :source or :dest
     # [_meaning_] FeatureValueMatrix
@@ -518,15 +596,17 @@ module PhoneticAlign
     end
     
     def to_s
-      # TODO Need a way to graphically emphasize upper or lower word in an alignment.
-      "#{@word}\n#{@segment}\n#{@meaning}"
+      segment_lines = @segment.to_s.split("\n")
+      segment_lines[@word == :source ? 0 : 1] += " <=="
+      segment_s = segment_lines.join("\n")
+      "#{segment_s}\n#{@meaning}"
     end
     
     # Two morpheme hypotheses are equal if they have the same phonetic
     # component and meaning (even if they come from different words).
     def ==(other)
-      @segment.phonetic_component == other.phonetic_component and
-      @segment.meaning == other.meaning
+      phonetic_component == other.phonetic_component and
+      meaning == other.meaning
     end
     
     def phonetic_component
