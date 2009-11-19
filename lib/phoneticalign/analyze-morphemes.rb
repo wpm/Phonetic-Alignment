@@ -6,7 +6,7 @@ module AnalyzeMorphemes
   # The main routine for the executable <em>analyze-morphemes</em>.
   def AnalyzeMorphemes.main(stdout, arguments = [])
     # Get parameters from the command line and configuration files.
-    parameters = get_parameters
+    parser, parameters = get_parameters
     if parameters.has_key?(:logging)
       PhoneticAlign.set_log_level(eval("Logger::#{parameters[:logging]}"))
     end
@@ -71,7 +71,7 @@ module AnalyzeMorphemes
     parameters[:words] = ARGV[0] if not ARGV[0].nil?
     parameters[:segments] = ARGV[1] if not ARGV[1].nil?
 
-    parameters
+    [parser, parameters]
   end
   
 end
