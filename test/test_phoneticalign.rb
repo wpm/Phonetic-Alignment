@@ -92,6 +92,21 @@ class ArrayTestCase < Test::Unit::TestCase
       assert_equal([], pairs)
     end
 
+    should "support enumeration over subsets" do
+      powerset = []
+      [1,2,3].each_subset {|s| powerset << s}
+      assert_equal([[], [1], [1, 2], [1, 2, 3], [1, 3], [2], [2, 3], [3]], powerset.sort)
+      # Empty list.
+      powerset = []
+      [].each_subset {|s| powerset << s}
+      assert_equal([[]], powerset)
+    end
+
+    should "return a powerset with subsets sorted by length" do
+      expected = [[1, 2, 3], [1, 2], [1, 3], [2, 3], [1], [2], [3], []]
+      assert_equal(expected, [1,2,3].powerset_by_length)
+    end
+
   end
 end
 
@@ -1156,4 +1171,6 @@ class CreeTestCase < Test::Unit::TestCase
   end
   
 end
+
+
 

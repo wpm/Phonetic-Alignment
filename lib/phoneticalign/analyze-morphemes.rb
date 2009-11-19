@@ -34,14 +34,7 @@ module AnalyzeMorphemes
     # Do analysis.
     alignments = analysis.align_words
     morpheme_hypotheses = analysis.best_morpheme_hypotheses(alignments)
-    # Print morpheme hypotheses grouped by phonetic component.
-    morpheme_hypotheses.each_key do |p|
-      hyps = morpheme_hypotheses[p]
-      puts hyps.first.transcription
-      puts "-" * hyps.first.transcription.length
-      puts hyps.join("\n")
-      puts
-    end
+    puts morpheme_hypotheses.join("\n\n")
   end
 
   # Get parameters from the command line and configuration files.

@@ -606,7 +606,7 @@ module PhoneticAlign
 
   # A pairing of a meaning with a word segment in an alignment.
   class MorphemeHypothesis
-    attr_reader :meaning
+    attr_accessor :meaning
 
     # Create a morpheme hypothesis
     #

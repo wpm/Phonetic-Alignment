@@ -20,6 +20,38 @@ class Array
     end
   end
 
+  # Enumerate over all the subsets of this array's elements.  Enumerating over
+  # all subsets yields the power set.
+  #
+  #    > [1,2,3].each_subset {|p| puts p.inspect}
+  #    []
+  #    [1]
+  #    [2]
+  #    [1, 2]
+  #    [3]
+  #    [1, 3]
+  #    [2, 3]
+  #    [1, 2, 3]
+  #    => nil
+  def each_subset # :yields: subset Array
+    if empty?
+      yield []
+    else
+      x = first
+      self[1..-1].each_subset do |s|
+        yield s
+        yield [x] + s
+      end
+    end
+  end
+
+  # The powerset of this array in order from largest to smallest subset.
+  def powerset_by_length
+    powerset = []
+    each_subset {|subset| powerset << subset}
+    powerset.sort_by {|subset| -subset.length}
+  end
+
 end
 
 
