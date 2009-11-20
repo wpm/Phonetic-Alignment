@@ -359,11 +359,9 @@ class MorphemeTestCase < Test::Unit::TestCase
       assert_equal("ed", @ed.transcription)
     end
 
-    should "accept either a list or a set of allophones in its constructor" do
-      sz_set = PhoneticAlign::Morpheme.new(Set.new([[@phone_s], [@phone_z]]), @plural)
+    should "accept a list of allophones in its constructor" do
       sz_list = PhoneticAlign::Morpheme.new([[@phone_s], [@phone_z]], @plural)
-      assert_instance_of(Set, sz_list.allophones)
-      assert(sz_set == sz_list, "#{sz_set} != #{sz_list}")
+      assert_instance_of(PhoneticAlign::AllophoneSet, sz_list.allophones)
     end
     
     should "have only a single allophone when initialized with a list of identical allophones" do
@@ -390,6 +388,52 @@ class MorphemeTestCase < Test::Unit::TestCase
       assert(!@sz.is_compatible?(@ed))
       assert(!@ed.is_compatible?(@s))
     end
+  end
+end
+
+
+class AllophoneSetTestCase < Test::Unit::TestCase
+  context "Allophone sets" do
+    setup do
+      phone_table = happy_unhappy_unhappiness.phone_table
+      @happy = phone_table.phone_sequence("happy")
+      @happi = phone_table.phone_sequence("happi")
+      @ness = phone_table.phone_sequence("ness")
+    end
+    
+    should "be created from lists of phoneme sequences" do
+      s = PhoneticAlign::AllophoneSet.new([@happy, @happi])
+      assert_equal(Set.new([@happy, @happi]), s)
+    end
+    
+    should "be compatible iff one is a subset of another" do
+      happy = PhoneticAlign::AllophoneSet.new([@happy])
+      happy_happi = PhoneticAlign::AllophoneSet.new([@happy, @happi])
+      ness = PhoneticAlign::AllophoneSet.new([@ness])
+      assert(happy.is_compatible?(happy_happi))
+      assert(happy_happi.is_compatible?(happy))
+      assert((not happy.is_compatible?(ness)))
+      assert((not ness.is_compatible?(happy)))
+      assert((not happy_happi.is_compatible?(ness)))
+      assert((not ness.is_compatible?(happy_happi)))
+    end
+    
+    should "be able to serve as hash keys" do
+      happy1 = PhoneticAlign::AllophoneSet.new([@happy])
+      happy2 = PhoneticAlign::AllophoneSet.new([@happy])
+      ness = PhoneticAlign::AllophoneSet.new([@ness])
+      h = {happy1 => :value}
+      assert_equal(h[happy2], :value)
+      assert_nil(h[ness])
+    end
+    
+    should "stringify with allophones sorted and delimited by /" do
+      happy = PhoneticAlign::AllophoneSet.new([@happy])
+      assert_equal("happy", happy.to_s)
+      happy_happi = PhoneticAlign::AllophoneSet.new([@happy, @happi])
+      assert_equal("happi/happy", happy_happi.to_s)
+    end
+    
   end
 end
 

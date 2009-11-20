@@ -145,19 +145,21 @@ module PhoneticAlign
 
   # A morpheme is a pairing of a set of allphones and a meaning.
   class Morpheme
-    # A set of sequences of Phone objects
+    # An AllophoneSet
     attr_reader :allophones
     # A FeatureValueMatrix representing the meaning
-    attr_reader :meaning
+    attr_accessor :meaning
 
-    # Create the morpheme from an allophone set and a meaning.
+    # Create the morpheme from a sequence of allophones and a meaning.
     #
     # An allophone is a sequence of phones.
     #
-    # [_allophones_] sequence or set of allophones
+    # [_allophones_] sequence of allophones
     # [_meaning_] the meaning
     def initialize(allophones, meaning)
-      allophones = Set.new(allophones) if not allophones.is_a?(Set)
+      if not allophones.is_a?(AllophoneSet)
+        allophones = AllophoneSet.new(allophones)
+      end
       @allophones = allophones
       @meaning = meaning
     end
@@ -175,7 +177,7 @@ module PhoneticAlign
     # allophones of one are a subset of the allophones of the other.
     def is_compatible?(other)
       meaning == other.meaning and
-      (allophones.subset?(other.allophones) or other.allophones.subset?(allophones))
+      allophones.is_compatible?(other.allophones)
     end
 
     # A backslash-delimited list of allphone transcriptions followed by a
@@ -190,10 +192,30 @@ module PhoneticAlign
 
     # A backslash-delimited list of allphone transcriptions.
     def transcription
-      allophones.to_a.map do |allophone|
+      allophones.to_s
+    end
+  end
+
+
+  class AllophoneSet < Set
+    # [_allophones_] list of allophones
+    def initialize(allophones)
+      super
+    end
+    
+    # Display sorted allophones delimited by '/'.
+    def to_s
+      to_a.map do |allophone|
         allophone.map { |phone| phone.ipa }.join
       end.sort.join("/")
     end
+    
+    # Two allphone sets are compatible if the allophones of one are a subset
+    # of the allophones of the other.
+    def is_compatible?(other)
+      subset?(other) or other.subset?(self)
+    end
+    
   end
 
 
