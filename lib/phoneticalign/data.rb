@@ -42,7 +42,8 @@ module PhoneticAlign
 
   # A table of phones indexed by IPA character.
   #
-  # IPA characters, features, and values are all stored as Ruby symbols.
+  # The IPA character index to this table is a string, but all IPA characters,
+  # features, and values in the Phone objects it contains are  Ruby symbols.
   class PhoneTable < Hash
     # Create the table from comma-separated value data.
     #
@@ -58,7 +59,8 @@ module PhoneticAlign
       # keys are sorted by length so that multi-character phones are matched
       # first.  The '.' at the end matches phones not listed in the table,
       # which will cause phone_sequence to raise an ArgumentError.
-      segs = keys.sort_by {|s| -s.jlength} + ['.']
+      segs = keys.sort_by {|s| -s.jlength}.map { |s| Regexp.escape(s) }
+      segs += ['.']
       @seg_regex = Regexp.compile(segs.join("|"))
     end
 

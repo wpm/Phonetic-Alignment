@@ -92,6 +92,17 @@ module PhoneticAlign
       features == other.features
     end
 
+    # Defined eql? because this class defines its own hash function.
+    def eql?(other)
+      self == other
+    end
+
+    # Phones must define their own hash function in order for indentical sets
+    # of allophones to count as the same hash key.
+    def hash
+      [ipa, features, self.class].hash
+    end
+
     # The number of features in which two phones differ divided by the number
     # of features in this phone.
     #
@@ -143,7 +154,7 @@ module PhoneticAlign
     #
     # An allophone is a sequence of phones.
     #
-    # [_allophones_] sequence of allophones
+    # [_allophones_] sequence or set of allophones
     # [_meaning_] the meaning
     def initialize(allophones, meaning)
       allophones = Set.new(allophones) if not allophones.is_a?(Set)
@@ -321,9 +332,11 @@ module PhoneticAlign
     #
     # The match rate is a number from 0 to 1 that measures the similarity of
     # the two aligned words.
-    def match_rate
+    #
+    # [_ops_] list of edit operations
+    def match_rate(ops = nil)
       # TODO Different match rate for morpheme and phone alignments.
-      ops = edit_operations
+      ops = edit_operations if ops.nil?
       match = 0
       ops.each { |op| match += 1 if op.nil? }
       match/ops.length.to_f
@@ -432,6 +445,12 @@ module PhoneticAlign
       Segment.new(self, from, to)
     end
 
+    # The match rate of the alignment where phone substitutions with a cost
+    # beneath the threshold count as aligned.
+    def match_rate
+      alignment.match_rate(phonetic_operations)
+    end
+
     # Enumerate segments in order.
     def each
       boundaries = [0] + segment_boundaries + [alignment.length]
@@ -450,14 +469,14 @@ module PhoneticAlign
       if different_segments.length == 1
         different_segment = different_segments.first
         if not different_segment.phonetically_empty?(:source)
-          yield MorphemeHypothesis.new(different_segment, :source,
-                                       source_word.meaning - 
-                                       dest_word.meaning)
+          morph = Morpheme.new([different_segment.phonetic_component(:source)],
+                               source_word.meaning - dest_word.meaning)
+          yield MorphemeHypothesis.new(different_segment, :source, morph)
         end
         if not different_segment.phonetically_empty?(:dest)
-          yield MorphemeHypothesis.new(different_segment, :dest,
-                                       dest_word.meaning - 
-                                       source_word.meaning)
+          morph = Morpheme.new([different_segment.phonetic_component(:dest)],
+                               dest_word.meaning - source_word.meaning)
+          yield MorphemeHypothesis.new(different_segment, :dest, morph)
         end
       end
       # If only one of the alignment segments is the same, hypothesize the
@@ -467,8 +486,14 @@ module PhoneticAlign
         segment = same_segments.first
         shared_meaning = source_word.meaning & dest_word.meaning
         same_segment = same_segments.first
-        yield MorphemeHypothesis.new(same_segment, :source, shared_meaning)
-        yield MorphemeHypothesis.new(same_segment, :dest, shared_meaning)
+        # The aligned phonetic components become allomorphs in the new
+        # morpheme.
+        source_allophone = same_segment.phonetic_component(:source)
+        dest_allophone = same_segment.phonetic_component(:dest)
+        morph = Morpheme.new([source_allophone, dest_allophone],
+                             shared_meaning)
+        yield MorphemeHypothesis.new(same_segment, :source, morph)
+        yield MorphemeHypothesis.new(same_segment, :dest, morph)
       end
       # If a given word has only one phonetic segment, hypothesize that its
       # meaning is the word meaning minus the meaning of all other morphemes
@@ -494,7 +519,9 @@ module PhoneticAlign
           word_meaning = word == :source ? source_word.meaning : 
                                            dest_word.meaning
           meaning = word_meaning - morpheme_meaning
-          yield MorphemeHypothesis.new(phone_sequences.first, word, meaning)
+          phone_segment = phone_sequences.first
+          morph = Morpheme.new([phone_segment.phonetic_component(word)], meaning)
+          yield MorphemeHypothesis.new(phone_sequences.first, word, morph)
         end
       end
     end
@@ -591,8 +618,7 @@ module PhoneticAlign
     #
     # [_word_] :source or :dest
     def phonetic_component(word)
-      word = word == :source ? segmentation.source_alignment :
-                               segmentation.dest_alignment
+      word = word == :source ? source_alignment : dest_alignment
       word[from..to]
     end
 
@@ -604,19 +630,19 @@ module PhoneticAlign
   end
 
 
-  # A pairing of a meaning with a word segment in an alignment.
+  # A pairing of a morpheme with a word segment in an alignment.
   class MorphemeHypothesis
-    attr_accessor :meaning
+    attr_accessor :segment, :word, :morpheme
 
     # Create a morpheme hypothesis
     #
     # [_segment_] Segment from which the hypothesis is taken
     # [_word_] word from which this is taken: :source or :dest
-    # [_meaning_] FeatureValueMatrix representing the morpheme's meaning
-    def initialize(segment, word, meaning)
+    # [_morpheme_] Morpheme hypothesized for this word and segment
+    def initialize(segment, word, morpheme)
       @segment = segment
       @word = word
-      @meaning = meaning
+      @morpheme = morpheme
     end
     
     # The alignment with the segment emphasized and an arrow pointing at the
@@ -625,81 +651,24 @@ module PhoneticAlign
       segment_lines = @segment.to_s.split("\n")
       segment_lines[@word == :source ? 0 : 1] += " <=="
       segment_s = segment_lines.join("\n")
-      "#{transcription}\n#{@meaning}\n#{segment_s}"
+      "#{@morpheme}\n#{segment_s}"
     end
     
-    # Two morpheme hypotheses are equal if they have the same phonetic
-    # component and meaning (even if they come from different words).
     def ==(other)
-      phonetic_component == other.phonetic_component and
-      meaning == other.meaning
+      segment = other.segment and word == other.word and
+      morpheme == other.morpheme
     end
     
-    # The phonetic component of this morpheme hypothesis.
-    #
-    # This returns a sequences of phones or morphemes.
-    def phonetic_component
-      @segment.phonetic_component(@word)
+    # The match rate of this hypothesis' alignment.
+    def match_rate
+      segment.match_rate
     end
     
-    # The transcription of the phonetic component
-    def transcription
-      phonetic_component.collect { |p| p.transcription }.join("")
-    end
-    
-    # Return an index of this hypothesis' phonetic component that can be used
-    # as a key in a hash table.
-    def key
-      MorphemeHypothesisPhoneticKey.new(phonetic_component)
-    end
-    
-    # Send unhandled calls down to the segment.
+    # Send unhandled calls down to the morpheme.
     def method_missing(method, *args)
-      @segment.send(method, *args)
+      morpheme.send(method, *args)
     end
 
-  end
-
-
-  # A representation of the phonetic component of a morpheme hypothesis that
-  # can be used as a key in a hash table.
-  #
-  # This is the phonetic component with the hash and eql? operators defined to
-  # work on the string representation.
-  class MorphemeHypothesisPhoneticKey
-    #--
-    # These objects are used as keys when we build the morpheme_hypotheses
-    # hash in MorphologicalAnalysis.best_morpheme_hypotheses.  The phonetic
-    # components by themselves will sometimes have different hashes for the
-    # same string of phones.
-    #
-    # This is mysterious to me.  I would expect the same sequence of phones to
-    # have to same hash. What's more, I was able to generate this bug when
-    # running analyze-morphemes, but I was not able to reproduce it in the
-    # test scripts.
-    #
-    # The use of this class is a workaround for this problem.
-    #++
-    
-    # Create a phonetic key
-    #
-    # [<em>phonetic_component</em>] the phonetic component of a morpheme
-    #                               hypothesis
-    def initialize(phonetic_component)
-      @phonetic_component = phonetic_component
-    end
-
-    def to_s
-      @phonetic_component.to_s
-    end
-    
-    def eql?(other)
-      to_s == other.to_s
-    end
-    
-    def hash
-      to_s.hash
-    end
   end
 
 
