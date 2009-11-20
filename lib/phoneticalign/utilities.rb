@@ -64,9 +64,9 @@ class OptionParser
   # This function takes an optional block that is passed this object after the
   # command line has been processed.  This may be used to verify that these
   # arguments received are correct and raise errors if they are not.
-  def parse_with_error_handling!
+  def parse_with_error_handling!(arguments)
     begin
-      parse!
+      parse!(arguments)
     rescue OptionParser::InvalidOption => e
       exit_error(e, 1)
     end
