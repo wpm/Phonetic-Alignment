@@ -7,7 +7,7 @@ module PhoneticAlign
     # WordList of words to analyze
     attr_reader :word_list
 
-    # Create an analysis
+    # Create a morphological analysis
     #
     # [<em>word_list</em>] a WordList to analyze
     def initialize(word_list)
@@ -46,9 +46,8 @@ module PhoneticAlign
     #
     # [_alignments_] sequence of Alignment objects
     def best_morpheme_hypotheses(alignments)
-      # Get morpheme hypotheses from the alignments and group them into
-      # phonetic equivalence classes.
-      morpheme_hypotheses = MorphemeHypothesisEquivalenceClasses.new
+      # Get morpheme hypotheses from the alignments.
+      morpheme_hypotheses = []
       alignments.each do |alignment|
         LOGGER.debug("Compare\n" +
                      "#{alignment.source_word}\n#{alignment.dest_word}")
@@ -61,10 +60,11 @@ module PhoneticAlign
       end
       # Partition the morpheme hypotheses into equivalence classes based on
       # phonetic and then semantic compatibility.
-      morpheme_hypotheses.partition!
+      equivalence_classes =
+        MorphemeHypothesisEquivalenceClasses.new(morpheme_hypotheses)
       # Return the highest-ranked set of equivalent morpheme hypotheses based
       # on the sum of the match rates of the alignments in which they appear.
-      morpheme_hypotheses.best_class do |hyps|
+      equivalence_classes.best_class do |hyps|
         hyps.inject(0) { |r, hyp| r += hyp.match_rate  }
       end
     end
@@ -77,51 +77,24 @@ module PhoneticAlign
 
 
   class MorphemeHypothesisEquivalenceClasses < Hash
-    def initialize
-      @morpheme_hypotheses = []
-    end
-    
-    # Add a morpheme hypothesis to this collection.
-    #
-    # All the morpheme hypotheses must be added before partition! is called.
-    #
-    # [<em>morpheme_hypothesis</em>] New morpheme hypothesis
-    def <<(morpheme_hypothesis)
-      begin
-        @morpheme_hypotheses << morpheme_hypothesis
-      rescue NoMethodError => e
-        if @morpheme_hypothesis.nil?
-          LOGGER.fatal("Tried to add a hypothesis after partition! " +
-                       "had been called.")
-        end
-        raise
-      end
-    end
-
-    def to_s
-      if not @morpheme_hypotheses.nil?
-        # Partition has not been called yet.  Just display the list of
-        # morpheme hypotheses.
-        @morpheme_hypotheses.sort_by {|h| h.match_rate}.join("\n\n")
-      else
-        # Partition has been called.  Display the morpheme hypotheses grouped
-        # by equivalence class.
-        map do |allophones, hyps|
-          separator = "-"* allophones.to_s.length
-          "#{allophones}\n#{separator}\n" + hyps.flatten.join("\n")
-        end.join("\n\n")
-      end
-    end
-
     # Partition the morpheme hypotheses into phonetic and semantic equivalence
     # classes.
     #
-    # All the morpheme hypotheses must be added before this function is
-    # called.
-    def partition!
-      group_into_phonetic_equivalence_classes!
+    # [<em>morpheme_hypotheses</em>] sequence of MorphemeHypothesis objects to
+    #                                partition
+    def initialize(morpheme_hypotheses)
+      group_into_phonetic_equivalence_classes!(morpheme_hypotheses)
       group_into_semantic_equivalence_classes!
-      self
+    end
+
+    # The morpheme hypothesese grouped by phonetic and then semantic
+    # equivalence class with the allophone set displayed above the phonetic
+    # class.
+    def to_s
+      map do |allophones, hyps|
+        separator = "-"* allophones.to_s.length
+        "#{allophones}\n#{separator}\n" + hyps.flatten.join("\n")
+      end.join("\n\n")
     end
 
     # Return the best morpheme hypothesis equivalence class based on a scoring
@@ -160,11 +133,10 @@ module PhoneticAlign
     # Create a hash of morpheme hypothesis lists indexed by compatible
     # allophone sets.
     #
-    # When this function exits, the keys of this table will be allophone sets,
-    # the values will be lists of corresponding morpheme hypotheses, and the
-    # morpheme_hypotheses list will be nil.
-    def group_into_phonetic_equivalence_classes!
-      @morpheme_hypotheses.each do |morpheme_hypothesis|
+    # When this function exits, the keys of this table will be allophone sets
+    # and the values will be lists of corresponding morpheme hypotheses.
+    def group_into_phonetic_equivalence_classes!(morpheme_hypotheses)
+      morpheme_hypotheses.each do |morpheme_hypothesis|
         compatible = keys.find_all do |allophones|
           allophones.is_compatible?(morpheme_hypothesis.allophones)
         end
@@ -181,7 +153,6 @@ module PhoneticAlign
                                             morpheme_hypothesis)
         end
       end
-      @morpheme_hypotheses = nil
     end
 
     # Add a new morpheme hypothesis to the table indexed by allophones.  If
@@ -197,6 +168,9 @@ module PhoneticAlign
       self[key] << morpheme_hypothesis
     end
 
+    # Subdivide each set of morpheme hypotheses in a phonetic equivalence
+    # class into a semantic equivalence classes based on meaning
+    # intersections.
     def group_into_semantic_equivalence_classes!
       each do |allophones, morpheme_hypotheses|
         self[allophones] = compile_meanings(morpheme_hypotheses)

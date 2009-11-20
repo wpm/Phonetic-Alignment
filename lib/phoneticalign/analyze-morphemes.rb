@@ -12,8 +12,9 @@ module AnalyzeMorphemes
     end
     PhoneticAlign::LOGGER.debug("Parameters\n#{parameters}")
 
-    parser.exit_error("Words file not specified") \
-      unless parameters.has_key?(:words)
+    if not parameters.has_key?(:words)
+      parser.exit_error("Words file not specified")
+    end
 
     # Open data files.
     words, phones = [:words, :phones].map do |arg|
@@ -27,21 +28,12 @@ module AnalyzeMorphemes
         open(File.expand_path(arg))
       end
     end
-
     word_list = PhoneticAlign::WordList.new(words, phones)
     analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list)
 
     # Do analysis.
     alignments = analysis.align_words
     stdout.puts analysis.best_morpheme_hypotheses(alignments)
-    # puts morpheme_hypotheses.sort_by {|h| h.match_rate}.join("\n\n")
-    # phonetic_equivalence_class = analysis.best_morpheme_hypotheses(alignments)
-    # lines = phonetic_equivalence_class.collect do |p, hyps|
-    #   p.to_s + "\n" +
-    #   "-" * p.to_s.length + "\n" +
-    #   hyps.join("\n")
-    # end
-    # puts lines.join("\n\n")
   end
 
 
