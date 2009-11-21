@@ -17,6 +17,8 @@ module PhoneticAlign
       @morphemes = []
     end
 
+    # Display a list of hypothesized morphemes followed by a list of
+    # reanalyzed words.
     def to_s
       (["Morphemes"] + ["-" * "Morphemes".length] +
        morphemes +
@@ -47,7 +49,13 @@ module PhoneticAlign
       alignments = []
       @word_list.each_symmetric_pair do |w1, w2|
         if (w1.meaning & w2.meaning).empty?
-          LOGGER.debug("Skipping alignment for\n#{w1}\n#{w2}")
+          LOGGER.debug("Skipping alignment for\n" +
+                       "#{w1}\n#{w2}\nbecause they share no meaning")
+          next
+        end
+        if w1.fully_analyzed? and w2.fully_analyzed?
+          LOGGER.debug("Skipping alignment for fully analyzed words" +
+                       "\n#{w1}\n#{w2}")
           next
         end
         alignment = Alignment.new(w1, w2)

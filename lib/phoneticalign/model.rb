@@ -196,6 +196,11 @@ module PhoneticAlign
       other.kind_of?(Morpheme) and is_compatible?(other)
     end
 
+    # The number of phones in the longest allophone.
+    def length
+      allophones.map { |allophone| allophone.length }.max
+    end
+
     # Two morphemes are compatible if they have the same meaning and the
     # allophones of one are a subset of the allophones of the other.
     def is_compatible?(other)
@@ -215,7 +220,7 @@ module PhoneticAlign
 
     # A backslash-delimited list of allphone transcriptions.
     def transcription
-      allophones.to_s
+      "[#{allophones}]"
     end
   end
 
@@ -250,16 +255,7 @@ module PhoneticAlign
     # Morphemes are set off in square brackets.  Multiple allophones are
     # backslash-delimited.
     def transcription
-      @phonetic_component.map do |p|
-        case p
-        when Phone
-          p.transcription
-        when Morpheme
-          "[#{p.transcription}]"
-        else
-          raise RuntimeError.new("Invalid phonetic component item #{p}")
-        end
-      end.join
+      @phonetic_component.map { |p| p.transcription }.join
     end
 
     # A Word is fully-analyzed if its phonetic component consists entirely of
@@ -356,13 +352,34 @@ module PhoneticAlign
     # The match rate is a number from 0 to 1 that measures the similarity of
     # the two aligned words.
     #
+    # This is the fraction of aligned slots over total slots.  Each phone
+    # counts as one slot and is aligned if its edit operation is nil. 
+    # Morphemes count for as many slots as their longest phoneme and are
+    # always aligned.
+    #
     # [_ops_] list of edit operations
     def match_rate(ops = nil)
-      # TODO Different match rate for morpheme and phone alignments.
       ops = edit_operations if ops.nil?
-      match = 0
-      ops.each { |op| match += 1 if op.nil? }
-      match/ops.length.to_f
+      match = slots = 0
+      ops.each_with_index do |op, i|
+        if source_alignment[i].kind_of?(Morpheme) or
+           dest_alignment[i].kind_of?(Morpheme)
+          # Morphemes count for as many matches as their length in phones.
+          lengths = []
+          # TODO Should use the acutal number of phones in this word's
+          # segment, not phone lengths from allomorphs in other words.
+          [source_alignment[i], dest_alignment[i]].map do |w|
+            lengths << w.length if w.kind_of?(Morpheme)
+          end
+          match += lengths.max
+          slots += lengths.max
+        else
+          # Aligned phones count as one match.
+          match += op.nil? ? 1 : 0
+          slots += 1 
+        end
+      end
+      match/slots.to_f
     end
 
     # Divide the alignment into segments
@@ -431,14 +448,18 @@ module PhoneticAlign
     # [<em>substitution_threshold</em>] difference beneath which phone
     #                                   subsitutions are treated as matching
     def initialize(alignment, substitution_threshold)
-      # TODO Insert boundaries around morphemes.
       @alignment = alignment
       @substitution_threshold = substitution_threshold
       @segment_boundaries = []
       ops = phonetic_operations
-      # Insert boundaries at phonetic operation discontinuities.
+      # Insert boundaries at phonetic operation discontinuities and after
+      # morphemes.
       1.upto(ops.length-1) do |i|
-        segment_boundaries << i if not ops[i] == ops[i-1]
+        if ops[i] != ops[i-1] or
+          source_alignment[i-1].kind_of?(Morpheme) or
+          dest_alignment[i-1].kind_of?(Morpheme)
+          segment_boundaries << i
+        end
       end
     end
 

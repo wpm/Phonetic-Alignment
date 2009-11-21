@@ -341,22 +341,23 @@ class MorphemeTestCase < Test::Unit::TestCase
       assert_not_equal(p, m)
     end
 
+    should "have a length equal to the number of phones in its longest allophone" do
+      assert_equal(1, @s.length)
+      assert_equal(1, @z.length)
+      assert_equal(1, @sz.length)
+      assert_equal(2, @ed.length)
+    end
+
     should "have a transcription that is a backslash-delimited list of allphone transcriptions" do
-      assert_equal("s", @s.transcription)
-      assert_equal("s/z", @sz.transcription)
-      assert_equal("ed", @ed.transcription)
+      assert_equal("[s]", @s.transcription)
+      assert_equal("[s/z]", @sz.transcription)
+      assert_equal("[ed]", @ed.transcription)
     end
 
     should "stringify as a backslash-delimited list of allphone transcriptions followed by a meaning" do
-      assert_equal("s: [NUMBER = plural]", @s.to_s)
-      assert_equal("s/z: [NUMBER = plural]", @sz.to_s)
-      assert_equal("ed: [TENSE = past]", @ed.to_s)
-    end
-
-    should "have a transcription without the feature matrix" do
-      assert_equal("s", @s.transcription)
-      assert_equal("s/z", @sz.transcription)
-      assert_equal("ed", @ed.transcription)
+      assert_equal("[s]: [NUMBER = plural]", @s.to_s)
+      assert_equal("[s/z]: [NUMBER = plural]", @sz.to_s)
+      assert_equal("[ed]: [TENSE = past]", @ed.to_s)
     end
 
     should "accept a list of allophones in its constructor" do
@@ -370,6 +371,7 @@ class MorphemeTestCase < Test::Unit::TestCase
       m = PhoneticAlign::Morpheme.new([[e,d], [e,d]], @past)
       assert_equal(m.allophones, Set.new([[e,d]]))
     end
+
   end
 
   context "A pair of Morphemes" do
@@ -1108,9 +1110,9 @@ class MorphemeHypothesisTestCase < Test::Unit::TestCase
       assert_equal(@happy1.meaning, PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
       assert_equal(@happy2.meaning, PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
       assert_equal(@happi.meaning, PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
-      assert_equal("happy", @happy1.transcription)
-      assert_equal("happi/happy", @happy2.transcription)
-      assert_equal("happi/happy", @happi.transcription)
+      assert_equal("[happy]", @happy1.transcription)
+      assert_equal("[happi/happy]", @happy2.transcription)
+      assert_equal("[happi/happy]", @happi.transcription)
     end    
     
     should "have the match rate of the alignment as an attribute" do
@@ -1121,32 +1123,32 @@ class MorphemeHypothesisTestCase < Test::Unit::TestCase
     
     should "stringify with their segment emphasized and an arrow pointing at the word" do
       expected = <<-EOTEXT
-happy: [LEMMA = happy]
+[happy]: [LEMMA = happy]
 --|happy <==
 un|happy
 II|     
   |^^^^^
 0.7143
 EOTEXT
-      assert_equal(expected.strip, @happy1.to_s)
+      assert_equal(expected.strip, @happy1.to_s, "Expected\n#{expected.strip}\nGot\n#{@happy1.to_s}")
       expected = <<-EOTEXT
-happi/happy: [LEMMA = happy]
+[happi/happy]: [LEMMA = happy]
 --|happy|---- <==
 un|happi|ness
 II|    S|IIII
   |^^^^^|    
 0.3636
 EOTEXT
-      assert_equal(expected.strip, @happy2.to_s)
+      assert_equal(expected.strip, @happy2.to_s, "Expected\n#{expected.strip}\nGot\n#{@happy2.to_s}")
       expected = <<-EOTEXT
-happi/happy: [LEMMA = happy]
+[happi/happy]: [LEMMA = happy]
 --|happy|----
 un|happi|ness <==
 II|    S|IIII
   |^^^^^|    
 0.3636
 EOTEXT
-      assert_equal(expected.strip, @happi.to_s)
+      assert_equal(expected.strip, @happi.to_s, "Expected\n#{expected.strip}\nGot\n#{@happi.to_s}")
     end
   end
 
@@ -1154,20 +1156,20 @@ end
 
 
 class CreeTestCase < Test::Unit::TestCase
-  
-  context "The first iteration over the Cree data" do
-    setup do
-      data_dir = File.join(File.dirname(__FILE__), "..", "data")
-      @cree_phones = open(File.join(data_dir, "cree.phones")) do |file|
-        PhoneticAlign::PhoneTable.new(file)
-      end
-      @cree_words = open(File.join(data_dir, "cree.words")) do |file|
-        PhoneticAlign::WordList.new(file, @cree_phones)
-      end
-      @atim = @cree_words.find { |w| w.transcription == "atim" }
-      @atimwak = @cree_words.find { |w| w.transcription == "atimwak" }
-      @atimwa = @cree_words.find { |w| w.transcription == "atimwa" }
+  def setup
+    data_dir = File.join(File.dirname(__FILE__), "..", "data")
+    @cree_phones = open(File.join(data_dir, "cree.phones")) do |file|
+      PhoneticAlign::PhoneTable.new(file)
     end
+    @cree_words = open(File.join(data_dir, "cree.words")) do |file|
+      PhoneticAlign::WordList.new(file, @cree_phones)
+    end
+    @atim = @cree_words.find { |w| w.transcription == "atim" }
+    @atimwak = @cree_words.find { |w| w.transcription == "atimwak" }
+    @atimwa = @cree_words.find { |w| w.transcription == "atimwa" }
+  end
+
+  context "The first iteration over the Cree data" do
 
     should "have atim, atimwak, and atimwa in the word list" do
       assert_instance_of(PhoneticAlign::Word, @atim)
@@ -1388,7 +1390,7 @@ class CreeTestCase < Test::Unit::TestCase
       [atimwak_atim, atimwa_atim].each do |s|
         s.each_morpheme_hypothesis {|hyp| hyps << hyp}
       end
-      hyps = hyps.find_all { |hyp| hyp.transcription == "atim" }
+      hyps = hyps.find_all { |hyp| hyp.transcription == "[atim]" }
       # Hyps 0 and 1 come from one alignment. Hyps 2 and 3 come from the other
       # alignment.
       # They should all be equal to each other.
@@ -1415,6 +1417,24 @@ class CreeTestCase < Test::Unit::TestCase
       # don't understand.
     end
     
+  end
+
+  context "The words [atim]wa and [atim]wak with morpheme [atim]" do
+    should "insert boundary after [atim] morpheme" do
+      atim_meaning = PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog]
+      atim_morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")],
+                                               atim_meaning)
+      @atimwa.phonetic_component[0..3] = atim_morph
+      @atimwak.phonetic_component[0..3] = atim_morph
+      alignment = PhoneticAlign::Alignment.new(@atimwa, @atimwak)
+      # [atim]  |     w     a     |     -   
+      # [atim]  |     w     a     |     k   
+      #         |                 |     I   
+      # 0.8571
+      segmentation = alignment.segmentation
+      assert_equal(3, segmentation.length)
+      assert_equal(segmentation.segment_boundaries, [1,3])
+    end
   end
 
 end
