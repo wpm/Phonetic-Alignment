@@ -29,11 +29,17 @@ module AnalyzeMorphemes
       end
     end
     word_list = PhoneticAlign::WordList.new(words, phones)
-    analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list)
 
     # Do analysis.
-    alignments = analysis.align_words
-    stdout.puts analysis.best_morpheme_hypotheses(alignments)
+    analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list)
+    stdout.puts "Start\n#{analysis}\n\n"
+    i = 1
+    while true
+      break if analysis.next_iteration.nil?
+      stdout.puts "Iteration #{i}"
+      stdout.puts "#{analysis}\n\n"
+      i += 1
+    end
   end
 
 

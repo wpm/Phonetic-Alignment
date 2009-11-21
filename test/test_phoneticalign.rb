@@ -983,6 +983,13 @@ class SegementTestCase < Test::Unit::TestCase
       assert_equal(nil, @segments[2].meaning(:dest))
     end
     
+    should "say whether or not their phonetic component consists entirely of phones" do
+      assert_equal(true, @segments[1].is_phones?(:source))
+      assert_equal(true, @segments[0].is_phones?(:dest))
+      assert_equal(true, @segments[1].is_phones?(:dest))
+      assert_equal(true, @segments[2].is_phones?(:dest))
+    end
+    
     should "stringify with the segment emphasized" do
       expected =<<-EOTEXT
 --|happy|----
@@ -1038,6 +1045,13 @@ EOTEXT
       assert_equal(@ness_meaning, @segments[2].meaning(:dest))
     end
     
+    should "say that their phonetic components do not consist of phones" do
+      assert_equal(false, @segments[1].is_phones?(:source))
+      assert_equal(false, @segments[0].is_phones?(:dest))
+      assert_equal(false, @segments[1].is_phones?(:dest))
+      assert_equal(false, @segments[2].is_phones?(:dest))
+    end
+
   end
 
 end
@@ -1182,7 +1196,7 @@ class CreeTestCase < Test::Unit::TestCase
       # Morpheme hypotheses
       morpheme_hyps = []
       segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
-      assert_equal(3, morpheme_hyps.length)
+      assert_equal(4, morpheme_hyps.length)
       # wak: [NUMBER = plural]
       # atim|---
       # atim|wak <==
@@ -1202,8 +1216,8 @@ class CreeTestCase < Test::Unit::TestCase
       morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")],
                                           PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
                                                                             :DISTANCE => :proximate])
-      atim_source_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
-      assert_equal(atim_source_hyp, morpheme_hyps[1], "Expected\n#{atim_source_hyp}\nGot\n#{morpheme_hyps[1]}")
+      atim_source_hyp1 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
+      assert_equal(atim_source_hyp1, morpheme_hyps[1], "Expected\n#{atim_source_hyp1}\nGot\n#{morpheme_hyps[1]}")
       # atim: [DISTANCE = proximate, LEMMA = dog]
       # atim|---
       # atim|wak <==
@@ -1215,6 +1229,18 @@ class CreeTestCase < Test::Unit::TestCase
                                                                             :DISTANCE => :proximate])
       atim_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest, morph)
       assert_equal(atim_dest_hyp, morpheme_hyps[2], "Expected\n#{atim_dest_hyp}\nGot\n#{morpheme_hyps[2]}")
+      # atim: [DISTANCE = proximate, LEMMA = dog, NUMBER = singular]
+      # atim|--- <==
+      # atim|wak
+      #     |III
+      # ^^^^|   
+      # 0.5714
+      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")],
+                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                                            :DISTANCE => :proximate,
+                                                                            :NUMBER => :singular])
+      atim_source_hyp2 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
+      assert_equal(atim_source_hyp2, morpheme_hyps[3], "Expected\n#{atim_source_hyp2}\nGot\n#{morpheme_hyps[3]}")
     end
     
     should "get morpheme hypotheses for atim and wa from the atim/atimwa alignment" do
@@ -1232,7 +1258,7 @@ class CreeTestCase < Test::Unit::TestCase
       # Morpheme hypotheses
       morpheme_hyps = []
       segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
-      assert_equal(3, morpheme_hyps.length)
+      assert_equal(4, morpheme_hyps.length)
       # wa: [DISTANCE = obviate]
       # atim|--
       # atim|wa <==
@@ -1242,7 +1268,7 @@ class CreeTestCase < Test::Unit::TestCase
       morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("wa")],
                                           PhoneticAlign::FeatureValueMatrix[:DISTANCE => :obviate])
       wa_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest, morph)
-      assert_equal(wa_hyp, morpheme_hyps[0], "Expected\n#{wa_hyp}\ngot\n#{morpheme_hyps[0]}")
+      assert_equal(wa_hyp, morpheme_hyps[0], "Expected\n#{wa_hyp}\nGot\n#{morpheme_hyps[0]}")
       # atim: [LEMMA = dog, NUMBER = singular]
       # atim|-- <==
       # atim|wa
@@ -1252,8 +1278,8 @@ class CreeTestCase < Test::Unit::TestCase
       morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")], 
                                           PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
                                                                             :NUMBER => :singular])
-      atim_source_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
-      assert_equal(atim_source_hyp, morpheme_hyps[1], "Expected\n#{atim_source_hyp}\ngot\n#{morpheme_hyps[1]}")
+      atim_source_hyp1 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
+      assert_equal(atim_source_hyp1, morpheme_hyps[1], "Expected\n#{atim_source_hyp1}\nGot\n#{morpheme_hyps[1]}")
       # atim: [LEMMA = dog, NUMBER = singular]
       # atim|--
       # atim|wa <==
@@ -1264,7 +1290,19 @@ class CreeTestCase < Test::Unit::TestCase
                                           PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
                                                                             :NUMBER => :singular])
       atim_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest, morph)
-      assert_equal(atim_dest_hyp, morpheme_hyps[2], "Expected\n#{atim_dest_hyp}\ngot\n#{morpheme_hyps[2]}")
+      assert_equal(atim_dest_hyp, morpheme_hyps[2], "Expected\n#{atim_dest_hyp}\nGot\n#{morpheme_hyps[2]}")
+      # atim: [LEMMA = dog, DISTANCE = proximate, NUMBER = singular]
+      # atim|-- <==
+      # atim|wa
+      #     |II
+      # ^^^^|  
+      # 0.6667
+      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")], 
+                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                                            :DISTANCE => :proximate,
+                                                                            :NUMBER => :singular])
+      atim_source_hyp2 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
+      assert_equal(atim_source_hyp2, morpheme_hyps[3], "Expected\n#{atim_source_hyp2}\nGot\n#{morpheme_hyps[3]}")
     end
     
     should "get morpheme hypotheses for atimwa and k from the atimwa/atimwak alignment" do
@@ -1283,7 +1321,7 @@ class CreeTestCase < Test::Unit::TestCase
       # Morpheme hypotheses
       morpheme_hyps = []
       segments.each_morpheme_hypothesis {|hyp| morpheme_hyps << hyp}
-      assert_equal(3, morpheme_hyps.length)
+      assert_equal(4, morpheme_hyps.length)
       # k: [DISTANCE = proximate, NUMBER = plural]
       # atimwa|-
       # atimwa|k <==
@@ -1294,7 +1332,7 @@ class CreeTestCase < Test::Unit::TestCase
                                           PhoneticAlign::FeatureValueMatrix[:NUMBER => :plural,
                                                                             :DISTANCE => :proximate])
       k_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest, morph)
-      assert_equal(k_hyp, morpheme_hyps[0], "Expected\n#{k_hyp}\n#got{morpheme_hyps[0]}")
+      assert_equal(k_hyp, morpheme_hyps[0], "Expected\n#{k_hyp}\nGot#{morpheme_hyps[0]}")
       # atimwa: [LEMMA = dog]
       # atimwa|- <==
       # atimwa|k
@@ -1303,8 +1341,8 @@ class CreeTestCase < Test::Unit::TestCase
       # 0.8571
       morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atimwa")],
                                           PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog])
-      atimwa_source_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
-      assert_equal(atimwa_source_hyp, morpheme_hyps[1], "Expected\n#{atimwa_source_hyp}\n#got{morpheme_hyps[1]}")
+      atimwa_source_hyp1 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
+      assert_equal(atimwa_source_hyp1, morpheme_hyps[1], "Expected\n#{atimwa_source_hyp1}\nGot\n#{morpheme_hyps[1]}")
       # atimwa: [LEMMA = dog]
       # atimwa|-
       # atimwa|k <==
@@ -1314,7 +1352,19 @@ class CreeTestCase < Test::Unit::TestCase
       morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atimwa")],
                                           PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog])
       atimwa_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest, morph)
-      assert_equal(atimwa_dest_hyp, morpheme_hyps[2], "Expected\n#{atimwa_dest_hyp}\n#got{morpheme_hyps[2]}")
+      assert_equal(atimwa_dest_hyp, morpheme_hyps[2], "Expected\n#{atimwa_dest_hyp}\nGot\n#{morpheme_hyps[2]}")
+      # atimwa: [LEMMA = dog]
+      # atimwa|- <==
+      # atimwa|k
+      #       |I
+      # ^^^^^^| 
+      # 0.8571
+      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atimwa")],
+                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                                            :DISTANCE => :obviate,
+                                                                            :NUMBER => :singular])
+      atimwa_source_hyp2 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
+      assert_equal(atimwa_source_hyp2, morpheme_hyps[3], "Expected\n#{atimwa_source_hyp2}\nGot\n#{morpheme_hyps[3]}")
     end
 
   end

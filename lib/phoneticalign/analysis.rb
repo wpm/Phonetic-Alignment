@@ -6,25 +6,39 @@ module PhoneticAlign
 
     # WordList of words to analyze
     attr_reader :word_list
+    # Discovered Morpheme objets
+    attr_reader :morphemes
 
     # Create a morphological analysis
     #
     # [<em>word_list</em>] a WordList to analyze
     def initialize(word_list)
       @word_list = word_list
+      @morphemes = []
     end
 
-    # Enumerate iterations of the analysis.  This is the top-level loop of the
-    # morphological analysis procedure.
-    def each
-      morphemes = Set.new
-      until @word_list.all? { |word| word.fully_analyzed? }
-        alignments = align_words
-        morpheme_hypotheses = best_morpheme_hypotheses(alignments)
-        break if morpheme_hypotheses.emtpy?
-        reanalyze_words(morpheme_hypotheses)
-        morphemes += morpheme_hypotheses
-      end
+    def to_s
+      (["Morphemes"] + ["-" * "Morphemes".length] +
+       morphemes +
+       ["Word List"] + ["-" * "Word List".length] +
+       word_list).join("\n")
+    end
+
+    # Run the next iteration of the analysis.  This is the top-level loop of
+    # the morphological analysis procedure.
+    #
+    # This returns nil when the analysis is complete and self when it is not.
+    def next_iteration
+      return nil if @word_list.all? { |word| word.fully_analyzed? }
+      alignments = align_words
+      allophones, meaning, morpheme_hypotheses = 
+        best_morpheme_hypotheses(alignments)
+      return nil if morpheme_hypotheses.empty?
+      new_morpheme = Morpheme.new(allophones, meaning)
+      LOGGER.debug("New morpheme: #{new_morpheme}")
+      @morphemes << new_morpheme
+      reanalyze_words(morpheme_hypotheses)
+      self
     end
 
     # Generate alignments for all the word pairs in the list that have
@@ -69,8 +83,13 @@ module PhoneticAlign
       end
     end
 
+    # Insert the specified morpheme hypotheses into the phonetic components of
+    # their words.
     def reanalyze_words(morpheme_hypotheses)
-      # TODO Implement reanalyze_words
+      morpheme_hypotheses.each do |morpheme_hypothesis|
+        morpheme_hypothesis.insert_into_word
+      end
+      LOGGER.debug("Reanalyzed word list\n#{word_list}")
     end
 
   end
@@ -106,17 +125,21 @@ module PhoneticAlign
     def best_class(&scoring_function)
       partition! if not @morpheme_hypotheses.nil?
       score = 0
-      best = nil
+      best_meaning = []
+      best_allophones = []
+      best_hypotheses = []
       each_equivalence_class do |allophones, morpheme_hypotheses|
         new_score = scoring_function.call(morpheme_hypotheses)
         LOGGER.debug("#{sprintf '%0.4f', new_score}\t" +
                      "#{allophones}:#{morpheme_hypotheses.first.meaning}")
         if new_score >= score
           score = new_score
-          best = morpheme_hypotheses
+          best_meaning = morpheme_hypotheses.first.meaning
+          best_allophones = allophones
+          best_hypotheses = morpheme_hypotheses
         end
       end
-      best
+      [best_allophones, best_meaning, best_hypotheses]
     end
 
     protected

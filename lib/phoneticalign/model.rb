@@ -143,6 +143,29 @@ module PhoneticAlign
   end
 
 
+  # A set of allophones for a morpheme.
+  class AllophoneSet < Set
+    # [_allophones_] list of allophones
+    def initialize(allophones)
+      super
+    end
+    
+    # Display sorted allophones delimited by '/'.
+    def to_s
+      to_a.map do |allophone|
+        allophone.map { |phone| phone.ipa }.join
+      end.sort.join("/")
+    end
+    
+    # Two allphone sets are compatible if the allophones of one are a subset
+    # of the allophones of the other.
+    def is_compatible?(other)
+      subset?(other) or other.subset?(self)
+    end
+    
+  end
+
+
   # A morpheme is a pairing of a set of allphones and a meaning.
   class Morpheme
     # An AllophoneSet
@@ -197,32 +220,10 @@ module PhoneticAlign
   end
 
 
-  class AllophoneSet < Set
-    # [_allophones_] list of allophones
-    def initialize(allophones)
-      super
-    end
-    
-    # Display sorted allophones delimited by '/'.
-    def to_s
-      to_a.map do |allophone|
-        allophone.map { |phone| phone.ipa }.join
-      end.sort.join("/")
-    end
-    
-    # Two allphone sets are compatible if the allophones of one are a subset
-    # of the allophones of the other.
-    def is_compatible?(other)
-      subset?(other) or other.subset?(self)
-    end
-    
-  end
-
-
   # A word is a pairing of a sequence of morphemes and phones with a meaning.
   class Word
     # A sequence of Morpheme and Phone objects
-    attr_reader :phonetic_component
+    attr_accessor :phonetic_component
     # A FeatureValueMatrix representing the meaning
     attr_reader :meaning
 
@@ -437,12 +438,12 @@ module PhoneticAlign
       ops = phonetic_operations
       # Insert boundaries at phonetic operation discontinuities.
       1.upto(ops.length-1) do |i|
-        @segment_boundaries << i if not ops[i] == ops[i-1]
+        segment_boundaries << i if not ops[i] == ops[i-1]
       end
     end
 
     def to_s
-      @alignment.to_s(segment_boundaries)
+      alignment.to_s(segment_boundaries)
     end
 
     # The number of segments
@@ -490,12 +491,12 @@ module PhoneticAlign
       # word segments.
       if different_segments.length == 1
         different_segment = different_segments.first
-        if not different_segment.phonetically_empty?(:source)
+        if different_segment.is_phones?(:source)
           morph = Morpheme.new([different_segment.phonetic_component(:source)],
                                source_word.meaning - dest_word.meaning)
           yield MorphemeHypothesis.new(different_segment, :source, morph)
         end
-        if not different_segment.phonetically_empty?(:dest)
+        if different_segment.is_phones?(:dest)
           morph = Morpheme.new([different_segment.phonetic_component(:dest)],
                                dest_word.meaning - source_word.meaning)
           yield MorphemeHypothesis.new(different_segment, :dest, morph)
@@ -506,16 +507,18 @@ module PhoneticAlign
       # segments.
       if same_segments.length == 1
         segment = same_segments.first
-        shared_meaning = source_word.meaning & dest_word.meaning
-        same_segment = same_segments.first
-        # The aligned phonetic components become allomorphs in the new
-        # morpheme.
-        source_allophone = same_segment.phonetic_component(:source)
-        dest_allophone = same_segment.phonetic_component(:dest)
-        morph = Morpheme.new([source_allophone, dest_allophone],
-                             shared_meaning)
-        yield MorphemeHypothesis.new(same_segment, :source, morph)
-        yield MorphemeHypothesis.new(same_segment, :dest, morph)
+        if segment.is_phones?(:source) # If source is phones so is dest.
+          shared_meaning = source_word.meaning & dest_word.meaning
+          same_segment = same_segments.first
+          # The aligned phonetic components become allomorphs in the new
+          # morpheme.
+          source_allophone = same_segment.phonetic_component(:source)
+          dest_allophone = same_segment.phonetic_component(:dest)
+          morph = Morpheme.new([source_allophone, dest_allophone],
+                               shared_meaning)
+          yield MorphemeHypothesis.new(same_segment, :source, morph)
+          yield MorphemeHypothesis.new(same_segment, :dest, morph)
+        end
       end
       # If a given word has only one phonetic segment, hypothesize that its
       # meaning is the word meaning minus the meaning of all other morphemes
@@ -526,9 +529,9 @@ module PhoneticAlign
         meanings = []
         each do |segment|
           meaning = segment.meaning(word)
-          if meaning.nil?
+          if segment.is_phones?(word)
             phone_sequences << segment
-          else
+          elsif meaning
             meanings << meaning
           end
         end
@@ -555,10 +558,10 @@ module PhoneticAlign
     # whose distance falls below a given threshold are treated as aligned
     # slots.
     def phonetic_operations
-      ops = @alignment.edit_operations.clone
+      ops = alignment.edit_operations.clone
       return ops if @substitution_threshold.nil?
-      source = @alignment.source_alignment
-      dest = @alignment.dest_alignment
+      source = alignment.source_alignment
+      dest = alignment.dest_alignment
       ops.each_with_index do |op, i|
         if op == :substitute and
            source[i].kind_of?(Phone) and dest[i].kind_of?(Phone) and
@@ -571,7 +574,7 @@ module PhoneticAlign
 
     # Send unhandled calls down to the alignment.
     def method_missing(method, *args)
-      @alignment.send(method, *args)
+      alignment.send(method, *args)
     end
 
   end
@@ -635,6 +638,14 @@ module PhoneticAlign
         meaning += item.meaning
       end
     end
+
+    # Is the phonetic component of the specified word comprised entirely of
+    # phones and not morphemes or nil?
+    #
+    # [_word_] :source or :dest
+    def is_phones?(word)
+      phonetic_component(word).all? {|item| item.kind_of?(Phone)}
+    end
     
     # The phonetic component of the specified word in this segment.
     #
@@ -679,6 +690,20 @@ module PhoneticAlign
     def ==(other)
       segment = other.segment and word == other.word and
       morpheme == other.morpheme
+    end
+
+    # Insert this hypothesized morpheme into the phonetic component of its
+    # word.
+    def insert_into_word
+      original_word = case word
+      when :source
+        segment.source_word
+      when :dest
+        segment.dest_word
+      else
+        raise RuntimeError.new("Invalid word value #{word}")
+      end
+      original_word.phonetic_component[segment.from..segment.to] = morpheme
     end
     
     # The match rate of this hypothesis' alignment.
