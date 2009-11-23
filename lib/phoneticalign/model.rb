@@ -82,12 +82,7 @@ module PhoneticAlign
     end
 
     # Phones are equal if they have the same IPA character and features.
-    #
-    # This function returns false if other is not a kind of Phone.  We do
-    # explicit type checking here instead of relying on duck typing because
-    # the edit alignment algorithm will compare phones and morphemes.
     def ==(other)
-      other.kind_of?(Phone) and
       ipa == other.ipa and
       features == other.features
     end
@@ -199,12 +194,8 @@ module PhoneticAlign
     end
 
     # Morphemes are equal if they are compatible.
-    #
-    # This function returns false if other is not a kind of Morpheme.  We do
-    # explicit type checking here instead of relying on duck typing because
-    # the edit alignment algorithm will compare phones and morphemes.
     def ==(other)
-      other.kind_of?(Morpheme) and is_compatible?(other)
+      allophones == other.allophones and meaning == other.meaning
     end
 
     # Morpheme defines eql? and hash so that we may use Morpheme objects as
@@ -335,6 +326,7 @@ module PhoneticAlign
       @source_word = source
       @dest_word = dest
       super(source.phonetic_component.clone, dest.phonetic_component.clone)
+      # TODO Push morpheme insertion/deletions outside unaligned phone region.
     end
 
     # The string representation of the alignment consists of four or five
@@ -464,9 +456,7 @@ module PhoneticAlign
     #
     # This function is called by the parent class.
     def substitute(item1, item2)
-      # TODO Push morpheme insertion/deletions outside unaligned phone region.
-      # TODO Do explicit type checking here instead of in Phone and Morpheme == operators
-      if item1 == item2
+      if item1.class == item2.class and item1 == item2
         0
       elsif item1.nil? or item2.nil?
         # Insertions and deletions have a cost of 1.

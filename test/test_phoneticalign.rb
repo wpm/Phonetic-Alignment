@@ -244,12 +244,6 @@ class PhoneTestCase < Test::Unit::TestCase
       assert_not_equal(p1, p2)
     end
 
-    should "not equal a morpheme" do
-      p = PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
-      m = PhoneticAlign::Morpheme.new([p], PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
-      assert_not_equal(m, p)
-    end
-
     should "handle unicode IPA characters" do
       assert_equal("dʒ", @j.ipa)
       assert_equal(2, @j.ipa.jlength)
@@ -345,12 +339,6 @@ class MorphemeTestCase < Test::Unit::TestCase
       happi = "happi".split("").map { |s| PhoneticAlign::Phone.new(s) }
       assert_equal(happy_happi1.allophones, PhoneticAlign::AllophoneSet.new([happy, happi]))
       assert_equal(happy_happi2.allophones, PhoneticAlign::AllophoneSet.new([happy, happi]))
-    end
-
-    should "not equal a phone" do
-      p = PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
-      m = PhoneticAlign::Morpheme.new([p], PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
-      assert_not_equal(p, m)
     end
 
     should "have a length equal to the number of phones in its longest allophone" do
@@ -800,7 +788,7 @@ class AlignmentTestCase < Test::Unit::TestCase
       # II
       align = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
       assert_equal(2, align.edit_distance)
-      assert_equal([:insert, :insert, nil, nil, nil, nil, nil], align.edit_operations)
+      assert_equal([:insert, :insert, nil, nil, nil, nil, nil], align.edit_operations, align)
     end
 
     should "align morphemes and morphemes" do
@@ -809,16 +797,16 @@ class AlignmentTestCase < Test::Unit::TestCase
       #  I
       align = PhoneticAlign::Alignment.new(@happy_m, @unhappy_m)
       assert_equal(1, align.edit_distance)
-      assert_equal([:insert, nil], align.edit_operations)
+      assert_equal([:insert, nil], align.edit_operations, align)
     end
 
     should "align compatible allomorphs" do
       # un        happy        -
       #  -     happi/happy   ness
-      #  D                     I
+      #  D          S         I
       align = PhoneticAlign::Alignment.new(@unhappy_m, @happy_happi_ness_m)
       assert_equal(2, align.edit_distance)
-      assert_equal([:delete, nil, :insert], align.edit_operations)
+      assert_equal([:delete, :substitute, :insert], align.edit_operations, align)
     end
 
     should "not align phones with morphemes" do
@@ -830,7 +818,7 @@ class AlignmentTestCase < Test::Unit::TestCase
       # character sequence u,n.
       align = PhoneticAlign::Alignment.new(@unhappy_p, @unhappy_pm)
       assert_equal(3, align.edit_distance)
-      assert_equal([:delete, :insert, :delete, nil, nil, nil, nil, nil], align.edit_operations)
+      assert_equal([:delete, :insert, :delete, nil, nil, nil, nil, nil], align.edit_operations, align)
     end
 
     should "define a length function equal to the number of slots" do
