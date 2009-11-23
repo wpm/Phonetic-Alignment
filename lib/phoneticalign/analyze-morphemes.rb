@@ -31,7 +31,8 @@ module AnalyzeMorphemes
     word_list = PhoneticAlign::WordList.new(words, phones)
 
     # Do analysis.
-    analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list)
+    analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list,
+                                          parameters[:powerset_search_cutoff])
     i = 1
     while true
       PhoneticAlign::LOGGER.info("Iteration #{i}")
@@ -73,6 +74,12 @@ EOTEXT
 
       opts.on("-c", "--config FILE", "YAML config file") do |filename|
         config = filename
+      end
+      
+      opts.on("-p", "--powerset-search-cutoff N", Integer,
+              "Cutoff value for powerset search "+
+              "(default #{PhoneticAlign::POWERSET_SEARCH_CUTOFF})") do |n|
+        parameters[:powerset_search_cutoff] = n
       end
     end
     parser.parse_with_error_handling!(arguments)

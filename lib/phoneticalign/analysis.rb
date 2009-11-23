@@ -12,8 +12,10 @@ module PhoneticAlign
     # Create a morphological analysis
     #
     # [<em>word_list</em>] a WordList to analyze
-    def initialize(word_list)
+    def initialize(word_list, powerset_search_cutoff = nil)
       @word_list = word_list
+      @powerset_search_cutoff = powerset_search_cutoff.nil? ?
+        POWERSET_SEARCH_CUTOFF : powerset_search_cutoff
       @morphemes = []
     end
 
@@ -80,7 +82,8 @@ module PhoneticAlign
       # Partition the morpheme hypotheses into equivalence classes based on
       # phonetic and then semantic compatibility.
       equivalence_classes =
-        MorphemeHypothesisEquivalenceClasses.new(morpheme_hypotheses)
+        MorphemeHypothesisEquivalenceClasses.new(morpheme_hypotheses,
+                                                 @powerset_search_cutoff)
       # Return the highest-ranked set of equivalent morpheme hypotheses based
       # on the sum of the match rates of the alignments in which they appear.
       equivalence_classes.best_class do |hyps|
@@ -127,9 +130,12 @@ module PhoneticAlign
     #
     # [<em>morpheme_hypotheses</em>] sequence of MorphemeHypothesis objects to
     #                                partition
-    def initialize(morpheme_hypotheses)
+    # [<em>powerset_search_cutoff</em>] size of an allophone set above which
+    #                                    we will not do a powerset search for
+    #                                    the semantic equivalence classes
+    def initialize(morpheme_hypotheses, powerset_search_cutoff)
       group_into_phonetic_equivalence_classes!(morpheme_hypotheses)
-      group_into_semantic_equivalence_classes!
+      group_into_semantic_equivalence_classes!(powerset_search_cutoff)
     end
 
     # The morpheme hypothesese grouped by phonetic and then semantic
@@ -220,9 +226,29 @@ module PhoneticAlign
     # Subdivide each set of morpheme hypotheses in a phonetic equivalence
     # class into a semantic equivalence classes based on meaning
     # intersections.
-    def group_into_semantic_equivalence_classes!
-      each do |allophones, morpheme_hypotheses|
-        self[allophones] = compile_meanings(morpheme_hypotheses)
+    #
+    # [<em>powerset_search_cutoff</em>] size of an allophone set above which
+    #                                    we will not do a powerset search for
+    #                                    the semantic equivalence classes
+    def group_into_semantic_equivalence_classes!(powerset_search_cutoff)
+      each do |allophones, hyps|
+        LOGGER.debug("Compile semantic equivalence class for "+
+                     "#{allophones} (#{self[allophones].length} hypotheses)")
+        # If there is an meaning intersection between all the hypotheses,
+        # create a single semantic equivalence class.
+        meaning = shared_meaning(hyps)
+        self[allophones] = if not meaning.empty?
+          LOGGER.debug("Use shared meaning.")
+          [assign_meaning(hyps, meaning)]
+        elsif self[allophones].length <= powerset_search_cutoff
+          # If the hypothesis set for these allophones is small enough,
+          # exhaustively search its powerset for shared meanings.
+          LOGGER.debug("Find shared meanings with powerset search.")
+          powerset_compile_meanings(hyps)
+        else
+          LOGGER.debug("No shared meaning.")
+          []
+        end
       end
     end
 
@@ -238,25 +264,20 @@ module PhoneticAlign
     #
     # [<em>morpheme_hypotheses</em>] list of morpheme hypotheses with the same
     #                                phonetic component
-    def compile_meanings(morpheme_hypotheses)
+    def powerset_compile_meanings(morpheme_hypotheses)
       compiled_morpheme_hypotheses = []
       while not morpheme_hypotheses.empty?
         # Find the largest subset of the morpheme hypotheses that share meaning.
-        shared_meaning = nil
+        shared = nil
         meaning_partition = morpheme_hypotheses.powerset_by_length.find do |partition|
-          shared_meaning =
-          partition.inject(partition.first.meaning) do |meaning, hyp|
-            meaning &= hyp.meaning
-          end
-          not shared_meaning.nil?
+          shared = shared_meaning(partition)
+          not shared.empty?
         end
         if not meaning_partition.nil?
           # Assign the shared meaning to all the morpheme hypotheses in the
           # partition and move these to the compiled morpheme hypothesis list.
           morpheme_hypotheses -= meaning_partition
-          meaning_partition.map do |hyp|
-            hyp.morpheme.meaning = shared_meaning
-          end
+          meaning_partition = assign_meaning(meaning_partition, shared)
           compiled_morpheme_hypotheses += [meaning_partition]
         else
           # There are no more meaning intersections.  Move all the remaining
@@ -267,6 +288,28 @@ module PhoneticAlign
         end
       end
       compiled_morpheme_hypotheses
+    end
+
+    # The meaning shared among a group of morpheme hypotheses.
+    #
+    # This returns the intersection of the meanings of all the morpheme
+    # hypotheses passed to it.
+    #
+    # [_hyps_] a list of morpheme hypotheses
+    def shared_meaning(hyps)
+      hyps.inject(hyps.first.meaning) do |meaning, hyp|
+        meaning &= hyp.meaning
+      end
+    end
+
+    # Assign a meaning to a group of morpheme hypotheses
+    #
+    # [_hyps_] a list of morpheme hypotheses
+    # [_meaning_] the meaning to assign to the morpheme in each of the
+    #             hypotheses
+    def assign_meaning(hyps, meaning)
+      hyps.map { |hyp| hyp.meaning = meaning }
+      hyps
     end
 
   end
