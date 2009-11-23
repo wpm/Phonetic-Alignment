@@ -92,13 +92,14 @@ module PhoneticAlign
       features == other.features
     end
 
-    # Defined eql? because this class defines its own hash function.
+    # Phone defines eql? and hash so that we may use Phone objects as hash
+    # keys.
     def eql?(other)
       self == other
     end
 
-    # Phones must define their own hash function in order for indentical sets
-    # of allophones to count as the same hash key.
+    # Phone defines eql? and hash so that we may use Phone objects as hash
+    # keys.
     def hash
       [ipa, features, self.class].hash
     end
@@ -145,9 +146,21 @@ module PhoneticAlign
 
   # A set of allophones for a morpheme.
   class AllophoneSet < Set
-    # [_allophones_] list of allophones
+    # Create the allophone set
+    #
+    # [_allophones_] list of allophones or strings
+    #
+    # If an item passed in to _allophones_ is a string it is converted into an
+    # array of phones with the characters as IPA and no phonetic features.
     def initialize(allophones)
-      super
+      allophones = allophones.map do |allophone|
+        if allophone.kind_of?(String)
+          allophone.split("").map { |s| Phone.new(s) }
+        else
+          allophone
+        end
+      end
+      super(allophones)
     end
     
     # Display sorted allophones delimited by '/'.
@@ -173,17 +186,15 @@ module PhoneticAlign
     # A FeatureValueMatrix representing the meaning
     attr_accessor :meaning
 
-    # Create the morpheme from a sequence of allophones and a meaning.
+    # Create the morpheme from an allophone set and a meaning.
     #
-    # An allophone is a sequence of phones.
-    #
-    # [_allophones_] sequence of allophones
+    # [<em>phone_sequences</em>] AllophoneSet or list of phone sequences
     # [_meaning_] the meaning
-    def initialize(allophones, meaning)
-      if not allophones.is_a?(AllophoneSet)
-        allophones = AllophoneSet.new(allophones)
+    def initialize(phone_sequences, meaning)
+      if not phone_sequences.is_a?(AllophoneSet)
+        phone_sequences = AllophoneSet.new(phone_sequences)
       end
-      @allophones = allophones
+      @allophones = phone_sequences
       @meaning = meaning
     end
 
@@ -194,6 +205,19 @@ module PhoneticAlign
     # the edit alignment algorithm will compare phones and morphemes.
     def ==(other)
       other.kind_of?(Morpheme) and is_compatible?(other)
+    end
+
+    # Morpheme defines eql? and hash so that we may use Morpheme objects as
+    # hash keys.
+    def eql?(other)
+      self == other
+    end
+
+    # Morpheme defines eql? and hash so that we may use Morpheme objects as
+    # hash keys.
+    def hash
+      # TODO Bug inconsistent with ==
+      [allophones, meaning].hash
     end
 
     # The number of phones in the longest allophone.
@@ -225,6 +249,9 @@ module PhoneticAlign
   end
 
 
+  # TODO SurfaceMorpheme < Morpheme appears in word phonetic components, has surface form.
+
+
   # A word is a pairing of a sequence of morphemes and phones with a meaning.
   class Word
     # A sequence of Morpheme and Phone objects
@@ -235,8 +262,18 @@ module PhoneticAlign
     # Create a word
     #
     # [<em>phonetic_component</em>] a sequence of Morpheme and Phone objects
+    #                               or a string
     # [_meaning_] a FeatureValueMatrix representing the word's meaning
+    #
+    # If a string is given for <em>phonetic_component</em> it is converted
+    # into an array of phones with the characters as IPA and no phonetic
+    # features.
     def initialize(phonetic_component, meaning)
+      if phonetic_component.kind_of?(String)
+        phonetic_component = phonetic_component.split("").collect do |s|
+          Phone.new(s)
+        end
+      end
       @phonetic_component = phonetic_component
       @meaning = meaning
     end
@@ -248,6 +285,23 @@ module PhoneticAlign
 
     def inspect
       to_s
+    end
+
+    # Two words are the same if they have the same phonetic component and
+    # meaning.
+    def ==(other)
+      phonetic_component == other.phonetic_component and
+      meaning == other.meaning
+    end
+
+    # Word defines eql? and hash so that we may use Word objects as hash keys.
+    def eql?(other)
+      self == other
+    end
+    
+    # Word defines eql? and hash so that we may use Word objects as hash keys.
+    def hash
+      [phonetic_component, meaning].hash
     end
 
     # Phone and morpheme transcription of the word.
@@ -410,6 +464,8 @@ module PhoneticAlign
     #
     # This function is called by the parent class.
     def substitute(item1, item2)
+      # TODO Push morpheme insertion/deletions outside unaligned phone region.
+      # TODO Do explicit type checking here instead of in Phone and Morpheme == operators
       if item1 == item2
         0
       elsif item1.nil? or item2.nil?
@@ -418,6 +474,8 @@ module PhoneticAlign
       elsif item1.is_a?(Morpheme) and item2.is_a?(Morpheme)
         # Morphemes only align with compatible morphemes.
         item1.is_compatible?(item2) ? 0 : @@INFINITY
+        # TODO Align morphemes with same meaning but different phonetic
+        # component.
       elsif item1.is_a?(Phone) and item2.is_a?(Phone)
         # The substitution cost of non-equal phones is a function of their
         # phonetic distance.
@@ -459,6 +517,7 @@ module PhoneticAlign
           source_alignment[i-1].kind_of?(Morpheme) or
           dest_alignment[i-1].kind_of?(Morpheme)
           segment_boundaries << i
+          # TODO are phonetic Subs followed by Ins or Dels really discontinuous?
         end
       end
     end
@@ -505,6 +564,7 @@ module PhoneticAlign
 
     # Enumerate morpheme hypotheses
     def each_morpheme_hypothesis
+      # TODO Ignore if all morphemes align with all phones?
       different_segments = find_all {|s| s.phonetically_different?}
       same_segments = find_all {|s| s.phonetically_same?}
       # If only one of the alignment segments is phonetically different,
@@ -708,15 +768,58 @@ module PhoneticAlign
       "#{@morpheme}\n#{segment_s}"
     end
     
+    # Two morpheme hypotheses are equal if they specify the same morpheme for
+    # the same phonetic component range in the same word.
     def ==(other)
-      segment = other.segment and word == other.word and
+      original_word == other.original_word and
+      original_word_offsets == other.original_word_offsets and
       morpheme == other.morpheme
     end
 
-    # Insert this hypothesized morpheme into the phonetic component of its
-    # word.
-    def insert_into_word
-      original_word = case word
+    # MorphemeHypothesis defines eql? and hash so that we may use
+    # MorphemeHypothesis objects as hash keys.
+    def eql?(other)
+      self == other
+    end
+    
+    # MorphemeHypothesis defines eql? and hash so that we may use
+    # MorphemeHypothesis objects as hash keys.
+    def hash
+      [original_word, original_word_offsets, morpheme].hash
+    end
+
+    # The offsets of this segment in the original word.
+    def original_word_offsets
+      [original_word_offset(segment.from), original_word_offset(segment.to)]
+    end
+    
+    # Offset of the segment in the original word.
+    #
+    # [wa]: [DISTANCE = obviate, NUMBER = singular]
+    #    a      t      i      |      -      |      m      |      w      a
+    #    -      -      -      |   [amisk]   |      -      |      w      a    <==
+    #    D      D      D      |      I      |      D      |
+    #
+    # The slot index of the "w" in the alignment above is 5.  The original
+    # word offset of this slot is 4 in the source word and 1 in the
+    # destination word.
+    def original_word_offset(slot_index)
+      word_alignment = case word
+      when :source
+        segment.source_alignment
+      when :dest
+        segment.dest_alignment
+      else
+        raise RuntimeError.new("Invalid word value #{word}")
+      end
+      word_alignment[0..slot_index].find_all do |p|
+        not p.nil?
+      end.length - 1
+    end
+
+    # Return the original word in the alignment.
+    def original_word
+      case word
       when :source
         segment.source_word
       when :dest
@@ -724,9 +827,8 @@ module PhoneticAlign
       else
         raise RuntimeError.new("Invalid word value #{word}")
       end
-      original_word.phonetic_component[segment.from..segment.to] = morpheme
     end
-    
+
     # The match rate of this hypothesis' alignment.
     def match_rate
       segment.match_rate

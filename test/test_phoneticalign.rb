@@ -335,6 +335,18 @@ class MorphemeTestCase < Test::Unit::TestCase
       assert(sz1 == sz2, "#{sz1} != #{sz2}")
     end
 
+    should "initialize given strings for phone sequences" do
+      happy_happi1 = PhoneticAlign::Morpheme.new(["happy", "happi"],
+                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
+      happy_happi2 = PhoneticAlign::Morpheme.new(["happi", "happy"],
+                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
+      assert_equal(happy_happi1, happy_happi2)
+      happy = "happy".split("").map { |s| PhoneticAlign::Phone.new(s) }
+      happi = "happi".split("").map { |s| PhoneticAlign::Phone.new(s) }
+      assert_equal(happy_happi1.allophones, PhoneticAlign::AllophoneSet.new([happy, happi]))
+      assert_equal(happy_happi2.allophones, PhoneticAlign::AllophoneSet.new([happy, happi]))
+    end
+
     should "not equal a phone" do
       p = PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
       m = PhoneticAlign::Morpheme.new([p], PhoneticAlign::FeatureValueMatrix[:f1 => :v1])
@@ -452,6 +464,9 @@ class WordTestCase < Test::Unit::TestCase
       @cat_morph = PhoneticAlign::Morpheme.new([[@c, @a, @t]], @lemma_cat)
       @s_morph = PhoneticAlign::Morpheme.new([[@s]], @number_plural)
       @cats_meaning = PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat, :NUMBER => :plural]
+      @dogs = PhoneticAlign::Word.new("dogs",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
+                                                                        :NUMBER => :plural])
     end
 
     should "permit a phonetic component consisting of all phones" do
@@ -470,6 +485,52 @@ class WordTestCase < Test::Unit::TestCase
       all_morphs = PhoneticAlign::Word.new([@cat_morph, @s_morph], @cats_meaning)
       assert_equal([@cat_morph, @s_morph], all_morphs.phonetic_component)
       assert_equal(@cats_meaning, all_morphs.meaning)
+    end
+
+    should "initialize with a string" do
+      string_init = PhoneticAlign::Word.new("cats", @cats_meaning)
+      assert_equal([@c, @a, @t, @s], string_init.phonetic_component)
+      assert_equal(@cats_meaning, string_init.meaning)
+    end
+
+    should "equal another word if the phonetic component and meaning are the same" do
+      cats1 = PhoneticAlign::Word.new("cats",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat,
+                                                                        :NUMBER => :plural])
+      cats2 = PhoneticAlign::Word.new("cats",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat,
+                                                                        :NUMBER => :plural])
+      assert_equal(cats1, cats2)
+    end
+
+    should "not equal another word if the phonetic components or meaning are different" do
+      cats = PhoneticAlign::Word.new("cats",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat,
+                                                                        :NUMBER => :plural])
+      assert_not_equal(cats, @dogs)
+      cats_diff_meaning = PhoneticAlign::Word.new("cats",
+                                    PhoneticAlign::FeatureValueMatrix[:LEMMA => :llama])
+      assert_not_equal(cats, cats_diff_meaning)
+      cats = PhoneticAlign::Word.new("cats",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat,
+                                                                        :NUMBER => :plural])
+      kats = PhoneticAlign::Word.new("kats",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat,
+                                                                        :NUMBER => :plural])
+      assert_not_equal(cats, kats)
+    end
+
+    should "be able to serve as a key in a hash table" do
+      cats1 = PhoneticAlign::Word.new("cats",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat,
+                                                                        :NUMBER => :plural])
+      cats2 = PhoneticAlign::Word.new("cats",
+                                      PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat,
+                                                                        :NUMBER => :plural])
+      h = {cats1 => :cats, @dogs => :dogs}
+      assert_equal(:cats, h[cats1])
+      assert_equal(:cats, h[cats2])
+      assert_equal(:dogs, h[@dogs])
     end
 
     should "be fully-analyzed if its phonetic component consists entirely of morphemes" do
@@ -517,6 +578,20 @@ class FormFeatureReaderTestCase < Test::Unit::TestCase
 
     setup do
       @phones, @words = jumps_sees
+    end
+
+    should "ignore blank lines" do
+      table = <<-EOTEXT
+
+FORM, FEATURE
+
+A, a
+
+B, b
+
+EOTEXT
+      expected = [["A", {:FEATURE => :a}], ["B", {:FEATURE => :b}]]
+      assert_equal(expected, PhoneticAlign::FormFeatureReader.new(table).collect)
     end
 
     should "read in a feature chart containing Unicode IPA symbols" do
@@ -1437,7 +1512,43 @@ class CreeTestCase < Test::Unit::TestCase
     end
   end
 
+  context "Two morpheme hypotheses from very different alignments" do
+    # These two morpheme hypotheses:
+    #
+    # [wa]: [DISTANCE = obviate]
+    #    a      |      -      |      t      i      |      m   
+    #    -      |   [amisk]   |      w      a      |      -    <==
+    #    D      |      I      |      S      S      |      D   
+    #           |             |   ^^^^^^^^^^^^^^   |          
+    # 0.5556
+    # [wa]: [DISTANCE = obviate]
+    # [amisk]   |      w      a    <==
+    # [amisk]   |      -      -   
+    #           |      D      D   
+    #           |   ^^^^^^^^^^^^^^
+    # 0.7143
+    #
+    # should be equal
+    should "be equal if they propose the same morpheme for the same portion of the same word" do
+      # Read the words out of the Cree word list and insert the [amisk] morpheme.
+      amisk = @cree_words.find { |w| w.transcription == "amisk" }
+      amisk.phonetic_component = [PhoneticAlign::Morpheme.new([amisk.phonetic_component],
+        PhoneticAlign::FeatureValueMatrix[:LEMMA => :beaver])]
+      amiskwa = @cree_words.find { |w| w.transcription == "amiskwa" }
+      amiskwa.phonetic_component[0..4] = PhoneticAlign::Morpheme.new([amiskwa.phonetic_component[0..4]],
+        PhoneticAlign::FeatureValueMatrix[:LEMMA => :beaver])
+      # Align and segment atim/[amisk]wa and [amisk]wa/[amisk].
+      atim_amiskwa = PhoneticAlign::Alignment.new(@atim, amiskwa).segmentation
+      amiskwa_amisk = PhoneticAlign::Alignment.new(amiskwa, amisk).segmentation
+      # Create [wa] morpheme hypotheses from the two alignments.
+      wa1 = PhoneticAlign::MorphemeHypothesis.new(atim_amiskwa[2], :dest,
+        PhoneticAlign::Morpheme.new(["wa"], PhoneticAlign::FeatureValueMatrix[:DISTANCE => :obviate]))
+      wa2 = PhoneticAlign::MorphemeHypothesis.new(amiskwa_amisk[1], :source,
+        PhoneticAlign::Morpheme.new(["wa"], PhoneticAlign::FeatureValueMatrix[:DISTANCE => :obviate]))
+      # The two [wa] morpheme hypotheses should  be equal because they propose
+      # the same morpheme for the same portion of the same word.
+      assert_equal(wa1, wa2, "#{wa1}\nnot equal to\n#{wa2}")
+    end
+  end
+
 end
-
-
-

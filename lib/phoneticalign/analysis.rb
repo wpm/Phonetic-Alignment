@@ -31,15 +31,16 @@ module PhoneticAlign
     #
     # This returns nil when the analysis is complete and self when it is not.
     def next_iteration
-      return nil if @word_list.all? { |word| word.fully_analyzed? }
       alignments = align_words
       allophones, meaning, morpheme_hypotheses = 
         best_morpheme_hypotheses(alignments)
       return nil if morpheme_hypotheses.empty?
       new_morpheme = Morpheme.new(allophones, meaning)
-      LOGGER.debug("New morpheme: #{new_morpheme}")
+      LOGGER.info("New morpheme: #{new_morpheme}")
       @morphemes << new_morpheme
       reanalyze_words(morpheme_hypotheses)
+      LOGGER.info("Reanalyzed word list\n#{word_list}")
+      # TODO Return a list of copies of this object to do a beam search.
       self
     end
 
@@ -51,11 +52,6 @@ module PhoneticAlign
         if (w1.meaning & w2.meaning).empty?
           LOGGER.debug("Skipping alignment for\n" +
                        "#{w1}\n#{w2}\nbecause they share no meaning")
-          next
-        end
-        if w1.fully_analyzed? and w2.fully_analyzed?
-          LOGGER.debug("Skipping alignment for fully analyzed words" +
-                       "\n#{w1}\n#{w2}")
           next
         end
         alignment = Alignment.new(w1, w2)
@@ -75,6 +71,7 @@ module PhoneticAlign
                      "#{alignment.source_word}\n#{alignment.dest_word}")
         # TODO Incorporate substitution threshold.
         segmentation = alignment.segmentation
+        LOGGER.debug("Segmentation\n#{segmentation}")
         segmentation.each_morpheme_hypothesis do |morpheme_hypothesis|
           LOGGER.debug("Morpheme Hypothesis\n#{morpheme_hypothesis}")
           morpheme_hypotheses << morpheme_hypothesis
@@ -94,15 +91,36 @@ module PhoneticAlign
     # Insert the specified morpheme hypotheses into the phonetic components of
     # their words.
     def reanalyze_words(morpheme_hypotheses)
-      morpheme_hypotheses.each do |morpheme_hypothesis|
-        morpheme_hypothesis.insert_into_word
+      # Create a table of morpheme hypotheses indexed by word.
+      word_table = Hash.new {[]}
+      morpheme_hypotheses.each do |hyp|
+        # TODO Check for overlapping morpheme ranges with asserts.
+        word_table[hyp.original_word] <<= hyp
       end
-      LOGGER.debug("Reanalyzed word list\n#{word_list}")
+      # Insert the new morphemes into the phonetic components of the original
+      # words.
+      word_table.each do |word, hyps|
+        # Don't insert a morpheme at the same location more than once.
+        hyps.uniq!
+        # Sort the morphemes in reverse order.  That way inserting the first
+        # one doesn't change the offsets of the subsequent ones.
+        hyps = hyps.sort_by {|hyp| -hyp.original_word_offsets[0] }
+        # Insert the new morphemes into the specified positions in the words'
+        # phonetic components.
+        hyps.each do |hyp|
+          from, to = hyp.original_word_offsets
+          LOGGER.debug("Insert #{hyp.morpheme} into " +
+                       "#{hyp.original_word.transcription}[#{from}..#{to}]")
+          hyp.original_word.phonetic_component[from..to] = hyp.morpheme
+        end
+      end
     end
 
   end
 
 
+  # Table of morpheme hypotheses indexed first by phonetic and then by
+  # semantic equivalence.
   class MorphemeHypothesisEquivalenceClasses < Hash
     # Partition the morpheme hypotheses into phonetic and semantic equivalence
     # classes.

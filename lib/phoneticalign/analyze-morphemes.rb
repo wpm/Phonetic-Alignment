@@ -32,14 +32,13 @@ module AnalyzeMorphemes
 
     # Do analysis.
     analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list)
-    stdout.puts "Start\n#{analysis}\n\n"
     i = 1
     while true
+      PhoneticAlign::LOGGER.info("Iteration #{i}")
       break if analysis.next_iteration.nil?
-      stdout.puts "Iteration #{i}"
-      stdout.puts "#{analysis}\n\n"
       i += 1
     end
+    stdout.puts "#{analysis}\n\n"
   end
 
 
