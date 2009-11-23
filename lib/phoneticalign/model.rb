@@ -185,11 +185,20 @@ module PhoneticAlign
     #
     # [<em>phone_sequences</em>] AllophoneSet or list of phone sequences
     # [_meaning_] the meaning
+    #
+    # If strings are given for the <em>phone_sequences</em> these are
+    # converted into lists of Phone objects without phonetic features.
+    #
+    # If a hash is given for the meaning, it is converted into a
+    # FeatureValueMatrix.
     def initialize(phone_sequences, meaning)
       if not phone_sequences.is_a?(AllophoneSet)
         phone_sequences = AllophoneSet.new(phone_sequences)
       end
       @allophones = phone_sequences
+      if meaning.instance_of?(Hash)
+        meaning = FeatureValueMatrix.from_hash(meaning)
+      end
       @meaning = meaning
     end
 

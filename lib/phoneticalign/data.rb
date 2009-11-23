@@ -137,6 +137,13 @@ module PhoneticAlign
       join("\n")
     end
 
+    # Return all the words with the specified transcription
+    #
+    # [_transcription_] transcription string
+    def matching_transcription(transcription)
+      find_all { |word| word.transcription == transcription  }
+    end
+
   end # WordList
 
 
