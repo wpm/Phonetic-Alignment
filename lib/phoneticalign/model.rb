@@ -158,6 +158,8 @@ module PhoneticAlign
       super(allophones)
     end
     
+    # TODO Define == operator
+    
     # Display sorted allophones delimited by '/'.
     def to_s
       to_a.map do |allophone|
@@ -643,9 +645,11 @@ module PhoneticAlign
           word_meaning = word == :source ? source_word.meaning : 
                                            dest_word.meaning
           meaning = word_meaning - morpheme_meaning
-          phone_segment = phone_sequences.first
-          morph = Morpheme.new([phone_segment.phonetic_component(word)], meaning)
-          yield MorphemeHypothesis.new(phone_sequences.first, word, morph)
+          if not meaning.empty?
+            phone_segment = phone_sequences.first
+            morph = Morpheme.new([phone_segment.phonetic_component(word)], meaning)
+            yield MorphemeHypothesis.new(phone_sequences.first, word, morph)
+          end
         end
       end
     end

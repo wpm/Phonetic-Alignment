@@ -1547,4 +1547,28 @@ class CreeTestCase < Test::Unit::TestCase
     end
   end
 
+  context "An alignment" do
+    should "never hypothesize a morpheme with an empty meaning" do
+      atim_morph = PhoneticAlign::Morpheme.new(["atim"], {:LEMMA => :dog})
+      k_morph = PhoneticAlign::Morpheme.new(["k"], {:DISTANCE => :proximate, :NUMBER => :plural})
+      @atimwa.phonetic_component[0..3] = atim_morph
+      @atimwak.phonetic_component[0..3] = atim_morph
+      @atimwak.phonetic_component[3..3] = k_morph
+      segmentation = PhoneticAlign::Alignment.new(@atimwa, @atimwak).segmentation
+      morpheme_hypotheses = []
+      segmentation.each_morpheme_hypothesis {|hyp| morpheme_hypotheses << hyp}
+      wa_morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("wa")],
+                    {:DISTANCE => :obviate, :NUMBER => :singular})
+      # Should return a single morpheme hypothesis for wa
+      #
+      # [wa]: [DISTANCE = obviate, NUMBER = singular]
+      # [atim]  |     w     a     |     -    <==
+      # [atim]  |     w     a     |    [k]  
+      #         |                 |     I   
+      #         |   ^^^^^^^^^^^^  |         
+      # 1.0000
+      assert_equal(1, morpheme_hypotheses.length)
+      assert_equal(wa_morph, morpheme_hypotheses.first.morpheme)
+    end
+  end
 end

@@ -147,6 +147,8 @@ module PhoneticAlign
       # Return the highest-ranked set of equivalent morpheme hypotheses based
       # on the sum of the match rates of the alignments in which they appear.
       equivalence_classes.best_class do |morpheme_hypotheses|
+        # The match rate objective appears to perform better than the coverage
+        # objective.
         # coverage_objective(morpheme_hypotheses)
         match_rate_objective(morpheme_hypotheses)
       end
