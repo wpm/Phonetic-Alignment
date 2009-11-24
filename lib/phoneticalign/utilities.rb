@@ -82,8 +82,10 @@ module PhoneticAlign
     # file in the home directory after any caller-specified configuration
     # files.
     #
+    # [<em>default_parameters</em>] default parameter hash
     # [_filenames_] list configuration filenames
-    def initialize(filenames = [])
+    def initialize(default_parameters = {}, filenames = [])
+      merge!(default_parameters)
       filenames += [File.join(ENV["HOME"], ".phoneticalign")]
       filenames.reverse!
       filenames.each do |filename|
@@ -106,7 +108,7 @@ module PhoneticAlign
     # [_filename_] configuration YAML file name
     def merge_config_file!(filename)
       filename = File.expand_path(filename)
-      self.merge!(YAML.load_file(filename))
+      merge!(YAML.load_file(filename))
     end
 
     # Merge another hash into this one, converting string parameters to

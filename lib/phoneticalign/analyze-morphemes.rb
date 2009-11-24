@@ -4,9 +4,18 @@ require "phoneticalign"
 module AnalyzeMorphemes
 
   # The main routine for the executable <em>analyze-morphemes</em>.
-  def AnalyzeMorphemes.main(stdout = STDOUT, arguments = [])
+  #
+  # [_out_] output stream, default STDOUT
+  # [_arguments_] command line arguments, default none
+  def AnalyzeMorphemes.main(out = STDOUT, arguments = [])
+    # The default analysis parameters.
+    default_parameters = {
+                            :new_morpheme_depth => 5,
+                            :beam_width => 5,
+                            :powerset_search_cutoff => 5
+                          }
     # Get parameters from the command line and configuration files.
-    parser, parameters = get_parameters(arguments)
+    parser, parameters = get_parameters(default_parameters, arguments)
     if parameters.has_key?(:logging)
       PhoneticAlign.set_log_level(eval("Logger::#{parameters[:logging]}"))
     end
@@ -32,14 +41,17 @@ module AnalyzeMorphemes
 
     # Do analysis.
     analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list,
+                                          parameters[:new_morpheme_depth],
                                           parameters[:powerset_search_cutoff])
-    i = 1
-    while true
-      PhoneticAlign::LOGGER.info("Iteration #{i}")
-      break if analysis.next_iteration.nil?
+    beam_search = PhoneticAlign::BeamSearch.new(parameters[:beam_width],
+                                                analysis)
+    i = 0
+    while not beam_search.done?
+      PhoneticAlign::LOGGER.info("Iteration #{i}\n#{beam_search}")
+      beam_search.next_iteration!
       i += 1
     end
-    stdout.puts "#{analysis}\n\n"
+    out.puts beam_search
   end
 
 
@@ -51,10 +63,11 @@ module AnalyzeMorphemes
   # file and command line.  It has the folllowing keys: :logging, :words,
   # :phones.
   #
+  # [<em>default_parameters</em>] default parameter hash
   # [_arguments_] command line arguments
-  def AnalyzeMorphemes.get_parameters(arguments)
+  def AnalyzeMorphemes.get_parameters(default_parameters, arguments)
     # Create the analysis parameters object from configuration files.
-    parameters = PhoneticAlign::AnalysisParameters.new
+    parameters = PhoneticAlign::AnalysisParameters.new(default_parameters)
 
     # Parse the command line arguments.
     config = nil
@@ -76,9 +89,19 @@ EOTEXT
         config = filename
       end
       
+      opts.on("-b", "--beam-width N", Integer, "Beam search width") do |n|
+        parameters[:beam_width] = n
+      end
+
+      opts.on("-n", "--new-morpheme-depth N", Integer,
+              "Number of new morpheme hypotheses to consider " +
+              "for a single analysis") do |n|
+        parameters[:new_morpheme_depth] = n
+      end
+      
       opts.on("-p", "--powerset-search-cutoff N", Integer,
               "Cutoff value for powerset search "+
-              "(default #{PhoneticAlign::POWERSET_SEARCH_CUTOFF})") do |n|
+              "(default #{parameters[:powerset_search_cutoff]})") do |n|
         parameters[:powerset_search_cutoff] = n
       end
     end

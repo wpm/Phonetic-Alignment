@@ -11,12 +11,6 @@ require "phoneticalign/utilities"
 module PhoneticAlign
   VERSION = "1.0.0"
 
-  # If there is no meaning intersection in a set of morpheme hypotheses, we
-  # can look for semantic equivalence classes by exhaustively searching
-  # through the powersets.  Since this is an exponential algorithm, only do it
-  # for sets equal to or smaller than this cutoff.
-  POWERSET_SEARCH_CUTOFF = 8
-
   # Create the logger and set its default log level to ERROR.  This function
   # is called when the module is loaded.
   def PhoneticAlign.initialize_logger
