@@ -5,7 +5,7 @@ module PhoneticAlign
     include Enumerable
 
     # WordList of words to analyze
-    attr_reader :word_list
+    attr_accessor :word_list
     # Discovered Morpheme objets
     attr_reader :morphemes
 
@@ -22,6 +22,19 @@ module PhoneticAlign
       @initial_phones = phones_in_word_list
     end
 
+    # Return a deep copy of this object.
+    #
+    # We can't use the Marshal.load(Marshal.dump(self)) on the entire
+    # MorphologicalAnalysis object because it stores EditAlign objects, which
+    # contain Hashes with default values.  Since the reason we make a deep
+    # copy is to fork the word list, do the Marshal trick on that while merely
+    # cloning the rest of the object.
+    def deep_copy
+      analysis_copy = self.clone
+      analysis_copy.word_list = Marshal.load(Marshal.dump(word_list))
+      analysis_copy
+    end
+
     # Display a list of hypothesized morphemes followed by a list of
     # reanalyzed words.
     def to_s
@@ -32,6 +45,13 @@ module PhoneticAlign
        ["Coverage #{sprintf '%0.4f', coverage}: " +
         "#{sprintf '%0.4f', phonetic_coverage} phonetic, " +
         "#{sprintf '%0.4f', semantic_coverage} semantic "]).join("\n")
+    end
+
+    # Return the specified word in the word list.
+    #
+    # [<em>word_index</em>] integer index into the word list
+    def [](word_index)
+      word_list[word_index]
     end
 
     # The number of phones in the word list.
@@ -86,17 +106,20 @@ module PhoneticAlign
     # Generate alignments for all the word pairs in the list that have
     # overlapping semantics.
     def align_words
-      alignments = []
-      @word_list.each_symmetric_pair do |w1, w2|
-        if (w1.meaning & w2.meaning).empty?
-          LOGGER.debug("Skipping alignment for\n" +
-                       "#{w1}\n#{w2}\nbecause they share no meaning")
-          next
+      @alignments = {}
+      0.upto(word_list.length-1) do |i|
+        0.upto(i-1) do |j|
+          w1 = self[i]
+          w2 = self[j]
+          if (w1.meaning & w2.meaning).empty?
+            LOGGER.debug("Skipping alignment for\n" +
+                         "#{w1}\n#{w2}\nbecause they share no meaning")
+            next
+          end
+          @alignments[Alignment.new(w1, w2)] = [i,j]
         end
-        alignment = Alignment.new(w1, w2)
-        alignments << alignment
       end
-      alignments
+      @alignments.keys
     end
 
     # Get a list of the best morpheme hypotheses in a given set of alignments.
@@ -123,18 +146,34 @@ module PhoneticAlign
                                                  @powerset_search_cutoff)
       # Return the highest-ranked set of equivalent morpheme hypotheses based
       # on the sum of the match rates of the alignments in which they appear.
-      equivalence_classes.best_class do |hyps|
-        hyps.inject(0) { |r, hyp| r += hyp.match_rate  }
+      equivalence_classes.best_class do |morpheme_hypotheses|
+        # coverage_objective(morpheme_hypotheses)
+        match_rate_objective(morpheme_hypotheses)
       end
+    end
+
+    # Rank morpheme hypothesis sets by the sum of their match rates.
+    def match_rate_objective(morpheme_hypotheses)
+      morpheme_hypotheses.inject(0) { |r, hyp| r += hyp.match_rate  }
+    end
+
+    # Rank morpheme hypothesis sets by the coverage they yield when inserted.
+    def coverage_objective(morpheme_hypotheses)
+      new_analysis = deep_copy
+      new_analysis.reanalyze_words(morpheme_hypotheses)
+      new_analysis.coverage
     end
 
     # Insert the specified morpheme hypotheses into the phonetic components of
     # their words.
     def reanalyze_words(morpheme_hypotheses)
       # Create a table of morpheme hypotheses indexed by word.
-      word_table = Hash.new {[]}
+      word_table = {}
       morpheme_hypotheses.each do |hyp|
         # TODO Check for overlapping morpheme ranges with asserts.
+        if not word_table.has_key?(hyp.original_word)
+          word_table[hyp.original_word] = []
+        end
         word_table[hyp.original_word] <<= hyp
       end
       # Insert the new morphemes into the phonetic components of the original
@@ -146,12 +185,24 @@ module PhoneticAlign
         # one doesn't change the offsets of the subsequent ones.
         hyps = hyps.sort_by {|hyp| -hyp.original_word_offsets[0] }
         # Insert the new morphemes into the specified positions in the words'
-        # phonetic components.
+        # phonetic components.  Make the changes to the word stored in this
+        # analysis' word list so that we may maintain multiple independent
+        # analyses.
         hyps.each do |hyp|
+          source_index, dest_index = @alignments[hyp.alignment]
+          word_index = case hyp.word
+          when :source
+            source_index
+          when :dest
+            dest_index
+          else
+            raise RuntimeError.new("Invalid word value #{word}")
+          end
+          original_word = word_list[word_index]
           from, to = hyp.original_word_offsets
           LOGGER.debug("Insert #{hyp.morpheme} into " +
-                       "#{hyp.original_word.transcription}[#{from}..#{to}]")
-          hyp.original_word.phonetic_component[from..to] = hyp.morpheme
+                       "#{original_word.transcription}[#{from}..#{to}]")
+          original_word.phonetic_component[from..to] = hyp.morpheme
         end
       end
     end

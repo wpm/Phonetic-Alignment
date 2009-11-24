@@ -84,16 +84,6 @@ end
 class ArrayTestCase < Test::Unit::TestCase
   context "An array" do
 
-    should "support enumeration over symmetric pairs of items" do
-      pairs = []
-      [1, 2, 3, 4].each_symmetric_pair {|p| pairs << p}
-      assert_equal([[2, 1], [3, 1], [3, 2], [4, 1], [4, 2], [4, 3]], pairs.sort)
-      # Empty list.
-      pairs = []
-      [].each_symmetric_pair {|p| pairs << p}
-      assert_equal([], pairs)
-    end
-
     should "support enumeration over subsets" do
       powerset = []
       [1,2,3].each_subset {|s| powerset << s}

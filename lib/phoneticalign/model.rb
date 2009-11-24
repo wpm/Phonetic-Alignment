@@ -852,6 +852,11 @@ module PhoneticAlign
       segment.match_rate
     end
     
+    # The alignment from which this hypothesis was generated.
+    def alignment
+      segment.alignment
+    end
+    
     # Send unhandled calls down to the morpheme.
     def method_missing(method, *args)
       morpheme.send(method, *args)
