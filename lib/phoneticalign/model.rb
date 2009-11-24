@@ -312,6 +312,25 @@ module PhoneticAlign
       @phonetic_component.map { |p| p.transcription }.join
     end
 
+    # The sum of all the meanings of the morphemes in this word.
+    def analyzed_meaning
+      meaning = FeatureValueMatrix.new
+      phonetic_component.each do |item|
+        meaning += item.meaning if item.kind_of?(Morpheme)
+      end
+      meaning
+    end
+
+    # The number of phones in the phonetic component that are not in
+    # morphemes.
+    def unanlayzed_phone_count
+      n = 0
+      phonetic_component.each do |item|
+        n += 1 if item.kind_of?(Phone)
+      end
+      n
+    end
+
     # A Word is fully-analyzed if its phonetic component consists entirely of
     # morphemes.
     def fully_analyzed?

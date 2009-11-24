@@ -17,6 +17,9 @@ module PhoneticAlign
       @powerset_search_cutoff = powerset_search_cutoff.nil? ?
         POWERSET_SEARCH_CUTOFF : powerset_search_cutoff
       @morphemes = []
+      # Calculate the number of phones in the word list before we have
+      # inserted any morphemes.
+      @initial_phones = phones_in_word_list
     end
 
     # Display a list of hypothesized morphemes followed by a list of
@@ -25,7 +28,41 @@ module PhoneticAlign
       (["Morphemes"] + ["-" * "Morphemes".length] +
        morphemes +
        ["Word List"] + ["-" * "Word List".length] +
-       word_list).join("\n")
+       word_list +
+       ["Coverage #{sprintf '%0.4f', coverage}: " +
+        "#{sprintf '%0.4f', phonetic_coverage} phonetic, " +
+        "#{sprintf '%0.4f', semantic_coverage} semantic "]).join("\n")
+    end
+
+    # The number of phones in the word list.
+    def phones_in_word_list
+      @word_list.inject(0) do |m, word|
+        m += word.unanlayzed_phone_count
+      end
+    end
+
+    # Mesure of how much of the original word list has been analyzed into
+    # morphemes.
+    def coverage
+      (phonetic_coverage + semantic_coverage)/2
+    end
+
+    # Proportion of the phones in the original word list that are part of an
+    # analyzed morpheme.
+    def phonetic_coverage
+      1 - phones_in_word_list/@initial_phones.to_f
+    end
+
+    # Proportion of feature/value pairs in the original word list that are
+    # part on an analyzed morpheme.
+    def semantic_coverage
+      num = 0
+      den = 0
+      @word_list.each do |word|
+        num += word.analyzed_meaning.length
+        den += word.meaning.length
+      end
+      num/den.to_f
     end
 
     # Run the next iteration of the analysis.  This is the top-level loop of
@@ -41,7 +78,7 @@ module PhoneticAlign
       LOGGER.info("New morpheme: #{new_morpheme}")
       @morphemes << new_morpheme
       reanalyze_words(morpheme_hypotheses)
-      LOGGER.info("Reanalyzed word list\n#{word_list}")
+      LOGGER.info("New analysis\n#{self}")
       # TODO Return a list of copies of this object to do a beam search.
       self
     end

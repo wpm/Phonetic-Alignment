@@ -521,6 +521,24 @@ class WordTestCase < Test::Unit::TestCase
       assert_equal(:dogs, h[@dogs])
     end
 
+    should "return the analyzed meaning for its morphemes" do
+      all_phones = PhoneticAlign::Word.new([@c, @a, @t, @s], @cats_meaning)
+      assert_equal(all_phones.analyzed_meaning, PhoneticAlign::FeatureValueMatrix.new)
+      phone_and_morphs = PhoneticAlign::Word.new([@cat_morph, @s], @cats_meaning)
+      assert_equal(phone_and_morphs.analyzed_meaning, @cat_morph.meaning)
+      all_morphs = PhoneticAlign::Word.new([@cat_morph, @s_morph], @cats_meaning)
+      assert_equal(all_morphs.analyzed_meaning, @cats_meaning)
+    end
+
+    should "return the number of unanlyzed phones" do
+      all_phones = PhoneticAlign::Word.new([@c, @a, @t, @s], @cats_meaning)
+      assert_equal(all_phones.unanlayzed_phone_count, 4)
+      phone_and_morphs = PhoneticAlign::Word.new([@cat_morph, @s], @cats_meaning)
+      assert_equal(phone_and_morphs.unanlayzed_phone_count, 1)
+      all_morphs = PhoneticAlign::Word.new([@cat_morph, @s_morph], @cats_meaning)
+      assert_equal(all_morphs.unanlayzed_phone_count, 0)
+    end
+
     should "be fully-analyzed if its phonetic component consists entirely of morphemes" do
       all_phones = PhoneticAlign::Word.new([@c, @a, @t, @s], @cats_meaning)
       assert(!all_phones.fully_analyzed?)
