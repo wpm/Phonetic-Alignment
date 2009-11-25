@@ -10,7 +10,6 @@ module AnalyzeMorphemes
   def AnalyzeMorphemes.main(out = STDOUT, arguments = [])
     # The default analysis parameters.
     default_parameters = {
-                            :new_morpheme_depth => 5,
                             :beam_width => 5,
                             :powerset_search_cutoff => 5
                           }
@@ -19,7 +18,7 @@ module AnalyzeMorphemes
     if parameters.has_key?(:logging)
       PhoneticAlign.set_log_level(eval("Logger::#{parameters[:logging]}"))
     end
-    PhoneticAlign::LOGGER.debug("Parameters\n#{parameters}")
+    PhoneticAlign::LOGGER.info("Parameters\n#{parameters}")
 
     if not parameters.has_key?(:words)
       parser.exit_error("Words file not specified")
@@ -40,11 +39,9 @@ module AnalyzeMorphemes
     word_list = PhoneticAlign::WordList.new(words, phones)
 
     # Do analysis.
-    analysis = PhoneticAlign::MorphologicalAnalysis.new(word_list,
-                                          parameters[:new_morpheme_depth],
+    beam_search = PhoneticAlign::BeamSearch.new(word_list,
+                                          parameters[:beam_width],
                                           parameters[:powerset_search_cutoff])
-    beam_search = PhoneticAlign::BeamSearch.new(parameters[:beam_width],
-                                                analysis)
     i = 0
     while not beam_search.done?
       PhoneticAlign::LOGGER.info("Iteration #{i}\n#{beam_search}")
@@ -93,12 +90,6 @@ EOTEXT
         parameters[:beam_width] = n
       end
 
-      opts.on("-n", "--new-morpheme-depth N", Integer,
-              "Number of new morpheme hypotheses to consider " +
-              "for a single analysis") do |n|
-        parameters[:new_morpheme_depth] = n
-      end
-      
       opts.on("-p", "--powerset-search-cutoff N", Integer,
               "Cutoff value for powerset search "+
               "(default #{parameters[:powerset_search_cutoff]})") do |n|

@@ -2,12 +2,16 @@ module PhoneticAlign
 
   # Beam search over morphological analyses
   #
+  # [<em>word_list</em>] a WordList to analyze
   # [_width_] the number of analyses to run in parallel
-  # [_analysis_] the initial MorphologicalAnalysis 
+  # [<em>powerset_search_cutoff</em>] number of morpheme hypotheses above
+  #                                   which we will not do an exhaustive
+  #                                   search for semantic equivalence
+  #                                   classes
   class BeamSearch
-    def initialize(width, analysis)
+    def initialize(word_list, width, powerset_search_cutoff)
       @width = width
-      @beam = [analysis]
+      @beam = [MorphologicalAnalysis.new(word_list, powerset_search_cutoff)]
       @completed = []
     end
 
@@ -15,7 +19,8 @@ module PhoneticAlign
     def to_s
       analyses = @beam + @completed
       analyses = analyses.sort_by {|analysis| -analysis.coverage}
-      "Beam Search: #{@beam.length} active beams\n" + analyses.join("\n\n")
+      "Beam Search: #{@beam.length + @completed.length} beams, " +
+      "#{@beam.length} active\n" + analyses.join("\n\n")
     end
 
     # Get the next iteration of analyses from the currently active beam.
@@ -34,7 +39,8 @@ module PhoneticAlign
         end
       end
       # Keep the top @width beams active.
-      new_beam = new_beam.sort_by {|analysis| -analysis.coverage}
+      new_beam = new_beam.sort_by {|analysis| -analysis.score}
+      # TODO Collapse beams that make the same predictions.
       @beam = new_beam[0...@width]
     end
     
@@ -53,20 +59,20 @@ module PhoneticAlign
     attr_accessor :word_list
     # Discovered Morpheme objects
     attr_accessor :morphemes
+    attr_accessor :score
 
     # Create a morphological analysis
     #
     # [<em>word_list</em>] a WordList to analyze
-    # [<em>new_morpheme_depth</em>] number of new morphemes to hypothesize
     # [<em>powerset_search_cutoff</em>] number of morpheme hypotheses above
     #                                   which we will not do an exhaustive
     #                                   search for semantic equivalence
     #                                   classes
-    def initialize(word_list, new_morpheme_depth, powerset_search_cutoff)
+    def initialize(word_list, powerset_search_cutoff)
       @word_list = word_list
-      @new_morpheme_depth = new_morpheme_depth
       @powerset_search_cutoff = powerset_search_cutoff
       @morphemes = []
+      @score = 0
       # Calculate the number of phones in the word list before we have
       # inserted any morphemes.
       @initial_phones = phones_in_word_list
@@ -145,8 +151,7 @@ module PhoneticAlign
       morpheme_hypotheses = hypothesize_morphemes(alignments)
       return [] if morpheme_hypotheses.empty?
       equivalence_classes = collect_morpheme_hypotheses(morpheme_hypotheses)
-      new_morphemes = best_new_morphemes(@new_morpheme_depth,
-                                         equivalence_classes)
+      new_morphemes = best_new_morphemes(equivalence_classes)
       insert_morphemes_into_analyses(new_morphemes)
     end
 
@@ -201,9 +206,8 @@ module PhoneticAlign
     # hypotheses based on the sum of the match rates of the alignments in
     # which they appear.
     #
-    # [<em>new_morpheme_depth</em>] number of new morphemes to return
     # [<em>equivalence_classes</em>] set of morpheme equivalence classes
-    def best_new_morphemes(new_morpheme_depth, equivalence_classes)
+    def best_new_morphemes(equivalence_classes)
       new_morphemes = []
       equivalence_classes.each_equivalence_class do |allophones, hyps|
         morpheme = Morpheme.new(allophones, hyps.first.meaning)
@@ -213,7 +217,7 @@ module PhoneticAlign
                    :morpheme,
                    :morpheme_hypotheses).new(score, morpheme, hyps)
       end
-      new_morphemes.sort_by {|m| m.score} [0...new_morpheme_depth]
+      new_morphemes
     end
 
     # Create a new copy of this analysis with the hypothesized morphemes
@@ -224,11 +228,12 @@ module PhoneticAlign
       new_morphemes.map do |m|
         morpheme = m.morpheme
         morpheme_hypotheses = m.morpheme_hypotheses
-        LOGGER.info("New morpheme: #{morpheme}")
+        LOGGER.debug("New morpheme: #{morpheme}")
         analysis = self.deep_copy
         analysis.morphemes << morpheme
         analysis.reanalyze_words(morpheme_hypotheses)
-        LOGGER.info("New analysis\n#{analysis}")
+        analysis.score = m.score
+        LOGGER.debug("New analysis\n#{analysis}")
         analysis
       end
     end
