@@ -41,7 +41,7 @@ module PhoneticAlign
       # Keep the top @width beams active.
       new_beam = new_beam.sort_by {|analysis| -analysis.score}
       # TODO Collapse beams that make the same predictions.
-      @beam = new_beam[0...@width]
+      @beam = new_beam.uniq[0...@width]
     end
     
     # Are there no more active beams?
@@ -71,11 +71,23 @@ module PhoneticAlign
     def initialize(word_list, powerset_search_cutoff)
       @word_list = word_list
       @powerset_search_cutoff = powerset_search_cutoff
-      @morphemes = []
+      @morphemes = Set.new
       @score = 0
       # Calculate the number of phones in the word list before we have
       # inserted any morphemes.
       @initial_phones = phones_in_word_list
+    end
+
+    def ==(other)
+      word_list == other.word_list and morphemes == other.morphemes
+    end
+
+    def eql?(other)
+      self == other
+    end
+    
+    def hash
+      [word_list, morphemes].hash
     end
 
     # Return a deep copy of this object.
@@ -98,7 +110,7 @@ module PhoneticAlign
          "#{sprintf '%0.4f', phonetic_coverage} phonetic, " +
          "#{sprintf '%0.4f', semantic_coverage} semantic "] +
         ["Morphemes"] + ["-" * "Morphemes".length] +
-         morphemes +
+         morphemes.to_a.sort_by {|m| m.transcription} +
          ["Word List"] + ["-" * "Word List".length] +
          word_list
        ).join("\n")

@@ -292,6 +292,7 @@ module PhoneticAlign
     # Two words are the same if they have the same phonetic component and
     # meaning.
     def ==(other)
+      phonetic_component.map { |p| p.class } == other.phonetic_component.map { |p| p.class } and
       phonetic_component == other.phonetic_component and
       meaning == other.meaning
     end
