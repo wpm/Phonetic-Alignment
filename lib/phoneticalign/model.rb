@@ -139,36 +139,36 @@ module PhoneticAlign
   end
 
 
-  # A set of allophones for a morpheme.
-  class AllophoneSet < Set
-    # Create the allophone set
+  # A set of allomorphs for a morpheme.
+  class AllomorphSet < Set
+    # Create the allomorph set
     #
-    # [_allophones_] list of allophones or strings
+    # [_allomorphs_] list of allomorphs or strings
     #
-    # If an item passed in to _allophones_ is a string it is converted into an
+    # If an item passed in to _allomorphs_ is a string it is converted into an
     # array of phones with the characters as IPA and no phonetic features.
-    def initialize(allophones)
-      allophones = allophones.map do |allophone|
-        if allophone.kind_of?(String)
-          allophone.split("").map { |s| Phone.new(s) }
+    def initialize(allomorphs)
+      allomorphs = allomorphs.map do |allomorph|
+        if allomorph.kind_of?(String)
+          allomorph.split("").map { |s| Phone.new(s) }
         else
-          allophone
+          allomorph
         end
       end
-      super(allophones)
+      super(allomorphs)
     end
     
     # TODO Define == operator
     
-    # Display sorted allophones delimited by '/'.
+    # Display sorted allomorphs delimited by '/'.
     def to_s
-      to_a.map do |allophone|
-        allophone.map { |phone| phone.ipa }.join
+      to_a.map do |allomorph|
+        allomorph.map { |phone| phone.ipa }.join
       end.sort.join("/")
     end
     
-    # Two allphone sets are compatible if the allophones of one are a subset
-    # of the allophones of the other.
+    # Two allomorph sets are compatible if the allomorphs of one are a subset
+    # of the allomorphs of the other.
     def is_compatible?(other)
       subset?(other) or other.subset?(self)
     end
@@ -176,28 +176,31 @@ module PhoneticAlign
   end
 
 
-  # A morpheme is a pairing of a set of allphones and a meaning.
+  # A morpheme is a pairing of a set of allomorphs and a meaning.
   class Morpheme
-    # An AllophoneSet
-    attr_reader :allophones
+    # An AllomorphSet
+    attr_reader :allomorphs
     # A FeatureValueMatrix representing the meaning
     attr_accessor :meaning
 
-    # Create the morpheme from an allophone set and a meaning.
+    # Create the morpheme from a set of allomorphs and a meaning.
     #
-    # [<em>phone_sequences</em>] AllophoneSet or list of phone sequences
     # [_meaning_] the meaning
+    # [<em>allomorphs</em>] AllomorphSet or list of phone sequences
     #
-    # If strings are given for the <em>phone_sequences</em> these are
-    # converted into lists of Phone objects without phonetic features.
+    # An allomorph is a sequence of phones that represents a possible surface
+    # instantiation of this morpheme.
+    #
+    # If strings are given for the <em>allomorphs</em> these are converted
+    # into lists of Phone objects without phonetic features.
     #
     # If a hash is given for the meaning, it is converted into a
     # FeatureValueMatrix.
-    def initialize(phone_sequences, meaning)
-      if not phone_sequences.is_a?(AllophoneSet)
-        phone_sequences = AllophoneSet.new(phone_sequences)
+    def initialize(allomorphs, meaning)
+      if not allomorphs.is_a?(AllomorphSet)
+        allomorphs = AllomorphSet.new(allomorphs)
       end
-      @allophones = phone_sequences
+      @allomorphs = allomorphs
       if meaning.instance_of?(Hash)
         meaning = FeatureValueMatrix.from_hash(meaning)
       end
@@ -206,7 +209,7 @@ module PhoneticAlign
 
     # Morphemes are equal if they are compatible.
     def ==(other)
-      allophones == other.allophones and meaning == other.meaning
+      allomorphs == other.allomorphs and meaning == other.meaning
     end
 
     # Morpheme defines eql? and hash so that we may use Morpheme objects as
@@ -218,23 +221,22 @@ module PhoneticAlign
     # Morpheme defines eql? and hash so that we may use Morpheme objects as
     # hash keys.
     def hash
-      # TODO Bug inconsistent with ==
-      [allophones, meaning].hash
+      [allomorphs, meaning].hash
     end
 
-    # The number of phones in the longest allophone.
+    # The number of phones in the longest allomorph.
     def length
-      allophones.map { |allophone| allophone.length }.max
+      allomorphs.map { |allomorph| allomorph.length }.max
     end
 
     # Two morphemes are compatible if they have the same meaning and the
-    # allophones of one are a subset of the allophones of the other.
+    # allomorphs of one are a subset of the allomorphs of the other.
     def is_compatible?(other)
       meaning == other.meaning and
-      allophones.is_compatible?(other.allophones)
+      allomorphs.is_compatible?(other.allomorphs)
     end
 
-    # A backslash-delimited list of allphone transcriptions followed by a
+    # A backslash-delimited list of allomorph transcriptions followed by a
     # meaning.
     def to_s
       "#{transcription}: #{meaning}"
@@ -244,14 +246,11 @@ module PhoneticAlign
       to_s
     end
 
-    # A backslash-delimited list of allphone transcriptions.
+    # A backslash-delimited list of allomorph transcriptions.
     def transcription
-      "[#{allophones}]"
+      "[#{allomorphs}]"
     end
   end
-
-
-  # TODO SurfaceMorpheme < Morpheme appears in word phonetic components, has surface form.
 
 
   # A word is a pairing of a sequence of morphemes and phones with a meaning.
@@ -309,7 +308,7 @@ module PhoneticAlign
 
     # Phone and morpheme transcription of the word.
     #
-    # Morphemes are set off in square brackets.  Multiple allophones are
+    # Morphemes are set off in square brackets.  Multiple allomorphs are
     # backslash-delimited.
     def transcription
       @phonetic_component.map { |p| p.transcription }.join
@@ -614,9 +613,9 @@ module PhoneticAlign
           same_segment = same_segments.first
           # The aligned phonetic components become allomorphs in the new
           # morpheme.
-          source_allophone = same_segment.phonetic_component(:source)
-          dest_allophone = same_segment.phonetic_component(:dest)
-          morph = Morpheme.new([source_allophone, dest_allophone],
+          source_allomorph = same_segment.phonetic_component(:source)
+          dest_allomorph = same_segment.phonetic_component(:dest)
+          morph = Morpheme.new([source_allomorph, dest_allomorph],
                                shared_meaning)
           yield MorphemeHypothesis.new(same_segment, :source, morph)
           yield MorphemeHypothesis.new(same_segment, :dest, morph)

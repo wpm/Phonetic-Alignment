@@ -313,7 +313,7 @@ class MorphemeTestCase < Test::Unit::TestCase
   end
 
   context "A Morpheme" do
-    should "equal another morpheme with the same allophones and meaning" do
+    should "equal another morpheme with the same allomorphs and meaning" do
       sz1 = PhoneticAlign::Morpheme.new([[@phone_s], [@phone_z]], @plural)
       sz2 = PhoneticAlign::Morpheme.new([[@phone_s], [@phone_z]], @plural)
       assert(sz1 == sz2, "#{sz1} != #{sz2}")
@@ -327,50 +327,50 @@ class MorphemeTestCase < Test::Unit::TestCase
       assert_equal(happy_happi1, happy_happi2)
       happy = "happy".split("").map { |s| PhoneticAlign::Phone.new(s) }
       happi = "happi".split("").map { |s| PhoneticAlign::Phone.new(s) }
-      assert_equal(happy_happi1.allophones, PhoneticAlign::AllophoneSet.new([happy, happi]))
-      assert_equal(happy_happi2.allophones, PhoneticAlign::AllophoneSet.new([happy, happi]))
+      assert_equal(happy_happi1.allomorphs, PhoneticAlign::AllomorphSet.new([happy, happi]))
+      assert_equal(happy_happi2.allomorphs, PhoneticAlign::AllomorphSet.new([happy, happi]))
     end
 
-    should "have a length equal to the number of phones in its longest allophone" do
+    should "have a length equal to the number of phones in its longest allomorph" do
       assert_equal(1, @s.length)
       assert_equal(1, @z.length)
       assert_equal(1, @sz.length)
       assert_equal(2, @ed.length)
     end
 
-    should "have a transcription that is a backslash-delimited list of allphone transcriptions" do
+    should "have a transcription that is a backslash-delimited list of allomorph transcriptions" do
       assert_equal("[s]", @s.transcription)
       assert_equal("[s/z]", @sz.transcription)
       assert_equal("[ed]", @ed.transcription)
     end
 
-    should "stringify as a backslash-delimited list of allphone transcriptions followed by a meaning" do
+    should "stringify as a backslash-delimited list of allomorph transcriptions followed by a meaning" do
       assert_equal("[s]: [NUMBER = plural]", @s.to_s)
       assert_equal("[s/z]: [NUMBER = plural]", @sz.to_s)
       assert_equal("[ed]: [TENSE = past]", @ed.to_s)
     end
 
-    should "accept a list of allophones in its constructor" do
+    should "accept a list of allomorphs in its constructor" do
       sz_list = PhoneticAlign::Morpheme.new([[@phone_s], [@phone_z]], @plural)
-      assert_instance_of(PhoneticAlign::AllophoneSet, sz_list.allophones)
+      assert_instance_of(PhoneticAlign::AllomorphSet, sz_list.allomorphs)
     end
     
-    should "have only a single allophone when initialized with a list of identical allophones" do
+    should "have only a single allomorph when initialized with a list of identical allomorphs" do
       e = PhoneticAlign::Phone.new("e", PhoneticAlign::FeatureValueMatrix[:FORM => :e])
       d = PhoneticAlign::Phone.new("d", PhoneticAlign::FeatureValueMatrix[:FORM => :d])
       m = PhoneticAlign::Morpheme.new([[e,d], [e,d]], @past)
-      assert_equal(m.allophones, Set.new([[e,d]]))
+      assert_equal(m.allomorphs, Set.new([[e,d]]))
     end
 
   end
 
   context "A pair of Morphemes" do
-    should "be compatible if they have the same meanings and one's allophone set subsumes the other's" do
+    should "be compatible if they have the same meanings and one's allomorph set subsumes the other's" do
       assert(@s.is_compatible?(@s))
       assert(@s.is_compatible?(@sz))
     end
 
-    should "not be compatible if they have the same meaning but non-intersecting allophone sets" do
+    should "not be compatible if they have the same meaning but non-intersecting allomorph sets" do
       assert(!@s.is_compatible?(@z))
     end
 
@@ -384,8 +384,8 @@ class MorphemeTestCase < Test::Unit::TestCase
 end
 
 
-class AllophoneSetTestCase < Test::Unit::TestCase
-  context "Allophone sets" do
+class AllomorphSetTestCase < Test::Unit::TestCase
+  context "Allomorph sets" do
     setup do
       phone_table = happy_unhappy_unhappiness.phone_table
       @happy = phone_table.phone_sequence("happy")
@@ -394,14 +394,14 @@ class AllophoneSetTestCase < Test::Unit::TestCase
     end
     
     should "be created from lists of phoneme sequences" do
-      s = PhoneticAlign::AllophoneSet.new([@happy, @happi])
+      s = PhoneticAlign::AllomorphSet.new([@happy, @happi])
       assert_equal(Set.new([@happy, @happi]), s)
     end
     
     should "be compatible iff one is a subset of another" do
-      happy = PhoneticAlign::AllophoneSet.new([@happy])
-      happy_happi = PhoneticAlign::AllophoneSet.new([@happy, @happi])
-      ness = PhoneticAlign::AllophoneSet.new([@ness])
+      happy = PhoneticAlign::AllomorphSet.new([@happy])
+      happy_happi = PhoneticAlign::AllomorphSet.new([@happy, @happi])
+      ness = PhoneticAlign::AllomorphSet.new([@ness])
       assert(happy.is_compatible?(happy_happi))
       assert(happy_happi.is_compatible?(happy))
       assert((not happy.is_compatible?(ness)))
@@ -411,18 +411,18 @@ class AllophoneSetTestCase < Test::Unit::TestCase
     end
     
     should "be able to serve as hash keys" do
-      happy1 = PhoneticAlign::AllophoneSet.new([@happy])
-      happy2 = PhoneticAlign::AllophoneSet.new([@happy])
-      ness = PhoneticAlign::AllophoneSet.new([@ness])
+      happy1 = PhoneticAlign::AllomorphSet.new([@happy])
+      happy2 = PhoneticAlign::AllomorphSet.new([@happy])
+      ness = PhoneticAlign::AllomorphSet.new([@ness])
       h = {happy1 => :value}
       assert_equal(h[happy2], :value)
       assert_nil(h[ness])
     end
     
-    should "stringify with allophones sorted and delimited by /" do
-      happy = PhoneticAlign::AllophoneSet.new([@happy])
+    should "stringify with allomorphs sorted and delimited by /" do
+      happy = PhoneticAlign::AllomorphSet.new([@happy])
       assert_equal("happy", happy.to_s)
-      happy_happi = PhoneticAlign::AllophoneSet.new([@happy, @happi])
+      happy_happi = PhoneticAlign::AllomorphSet.new([@happy, @happi])
       assert_equal("happi/happy", happy_happi.to_s)
     end
     
@@ -1465,18 +1465,18 @@ class CreeTestCase < Test::Unit::TestCase
       # Hyps 0 and 1 come from one alignment. Hyps 2 and 3 come from the other
       # alignment.
       # They should all be equal to each other.
-      assert_equal(hyps[0].allophones, hyps[1].allophones)
-      assert_equal(hyps[2].allophones, hyps[3].allophones)
-      assert_equal(hyps[0].allophones, hyps[2].allophones)
-      assert_equal(hyps[0].allophones, hyps[3].allophones)
-      assert_equal(hyps[1].allophones, hyps[2].allophones)
-      assert_equal(hyps[1].allophones, hyps[3].allophones)
+      assert_equal(hyps[0].allomorphs, hyps[1].allomorphs)
+      assert_equal(hyps[2].allomorphs, hyps[3].allomorphs)
+      assert_equal(hyps[0].allomorphs, hyps[2].allomorphs)
+      assert_equal(hyps[0].allomorphs, hyps[3].allomorphs)
+      assert_equal(hyps[1].allomorphs, hyps[2].allomorphs)
+      assert_equal(hyps[1].allomorphs, hyps[3].allomorphs)
       # They should also all map to the same hash key.
-      h = {hyps[0].allophones => :value}
-      assert_equal(h[hyps[0].allophones], :value)
-      assert_equal(h[hyps[1].allophones], :value)
-      assert_equal(h[hyps[2].allophones], :value)
-      assert_equal(h[hyps[3].allophones], :value)
+      h = {hyps[0].allomorphs => :value}
+      assert_equal(h[hyps[0].allomorphs], :value)
+      assert_equal(h[hyps[1].allomorphs], :value)
+      assert_equal(h[hyps[2].allomorphs], :value)
+      assert_equal(h[hyps[3].allomorphs], :value)
       # If Phone does not define its own hash and eql? function, these tests
       # will fail.
       #

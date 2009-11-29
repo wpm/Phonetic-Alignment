@@ -221,8 +221,8 @@ module PhoneticAlign
     # [<em>equivalence_classes</em>] set of morpheme equivalence classes
     def best_new_morphemes(equivalence_classes)
       new_morphemes = []
-      equivalence_classes.each_equivalence_class do |allophones, hyps|
-        morpheme = Morpheme.new(allophones, hyps.first.meaning)
+      equivalence_classes.each_equivalence_class do |allomorphs, hyps|
+        morpheme = Morpheme.new(allomorphs, hyps.first.meaning)
         score = match_rate_objective(hyps)
         new_morphemes <<
         Struct.new(:score,
@@ -316,7 +316,7 @@ module PhoneticAlign
     #
     # [<em>morpheme_hypotheses</em>] sequence of MorphemeHypothesis objects to
     #                                partition
-    # [<em>powerset_search_cutoff</em>] size of an allophone set above which
+    # [<em>powerset_search_cutoff</em>] size of an allomorph set above which
     #                                    we will not do a powerset search for
     #                                    the semantic equivalence classes
     def initialize(morpheme_hypotheses, powerset_search_cutoff)
@@ -325,20 +325,20 @@ module PhoneticAlign
     end
 
     # The morpheme hypothesese grouped by phonetic and then semantic
-    # equivalence class with the allophone set displayed above the phonetic
+    # equivalence class with the allomorph set displayed above the phonetic
     # class.
     def to_s
-      map do |allophones, hyps|
-        separator = "-"* allophones.to_s.length
-        "#{allophones}\n#{separator}\n" + hyps.flatten.join("\n")
+      map do |allomorphs, hyps|
+        separator = "-"* allomorphs.to_s.length
+        "#{allomorphs}\n#{separator}\n" + hyps.flatten.join("\n")
       end.join("\n\n")
     end
 
     # Enumerate over the equivalence classes created by partitioning.
     def each_equivalence_class
-      each do |allophones, semantic_equivalence_classes|
+      each do |allomorphs, semantic_equivalence_classes|
         semantic_equivalence_classes.each do |morpheme_hypotheses|
-          yield [allophones, morpheme_hypotheses]
+          yield [allomorphs, morpheme_hypotheses]
         end
       end
     end
@@ -346,18 +346,18 @@ module PhoneticAlign
     protected
 
     # Create a hash of morpheme hypothesis lists indexed by compatible
-    # allophone sets.
+    # allomorph sets.
     #
-    # When this function exits, the keys of this table will be allophone sets
+    # When this function exits, the keys of this table will be allomorph sets
     # and the values will be lists of corresponding morpheme hypotheses.
     def group_into_phonetic_equivalence_classes!(morpheme_hypotheses)
       morpheme_hypotheses.each do |morpheme_hypothesis|
-        compatible = keys.find_all do |allophones|
-          allophones.is_compatible?(morpheme_hypothesis.allophones)
+        compatible = keys.find_all do |allomorphs|
+          allomorphs.is_compatible?(morpheme_hypothesis.allomorphs)
         end
         case compatible.length
         when 0
-          self[morpheme_hypothesis.allophones] = [morpheme_hypothesis]
+          self[morpheme_hypothesis.allomorphs] = [morpheme_hypothesis]
         when 1
           add_hypothesis_to_phonetic_class!(compatible.first,
                                             morpheme_hypothesis)
@@ -370,15 +370,15 @@ module PhoneticAlign
       end
     end
 
-    # Add a new morpheme hypothesis to the table indexed by allophones.  If
-    # the new hypothesis' allophone set is larger than the key currently in
+    # Add a new morpheme hypothesis to the table indexed by allomorphs.  If
+    # the new hypothesis' allomorph set is larger than the key currently in
     # the table, use it instead.
     def add_hypothesis_to_phonetic_class!(key, morpheme_hypothesis)
-      new_allophones = morpheme_hypothesis.allophones
-      if new_allophones.length > key.length
-        self[new_allophones] = self[key]
+      new_allomorphs = morpheme_hypothesis.allomorphs
+      if new_allomorphs.length > key.length
+        self[new_allomorphs] = self[key]
         self.delete(key)
-        key = new_allophones
+        key = new_allomorphs
       end
       self[key] << morpheme_hypothesis
     end
@@ -387,21 +387,21 @@ module PhoneticAlign
     # class into a semantic equivalence classes based on meaning
     # intersections.
     #
-    # [<em>powerset_search_cutoff</em>] size of an allophone set above which
+    # [<em>powerset_search_cutoff</em>] size of an allomorph set above which
     #                                    we will not do a powerset search for
     #                                    the semantic equivalence classes
     def group_into_semantic_equivalence_classes!(powerset_search_cutoff)
-      each do |allophones, hyps|
+      each do |allomorphs, hyps|
         LOGGER.debug("Compile semantic equivalence class for "+
-                     "#{allophones} (#{self[allophones].length} hypotheses)")
+                     "#{allomorphs} (#{self[allomorphs].length} hypotheses)")
         # If there is an meaning intersection between all the hypotheses,
         # create a single semantic equivalence class.
         meaning = shared_meaning(hyps)
-        self[allophones] = if not meaning.empty?
+        self[allomorphs] = if not meaning.empty?
           LOGGER.debug("Use shared meaning.")
           [assign_meaning(hyps, meaning)]
-        elsif self[allophones].length <= powerset_search_cutoff
-          # If the hypothesis set for these allophones is small enough,
+        elsif self[allomorphs].length <= powerset_search_cutoff
+          # If the hypothesis set for these allomorphs is small enough,
           # exhaustively search its powerset for shared meanings.
           LOGGER.debug("Find shared meanings with powerset search.")
           powerset_compile_meanings(hyps)
