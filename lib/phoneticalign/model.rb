@@ -248,6 +248,10 @@ module PhoneticAlign
       allomorphs.is_compatible?(other.allomorphs)
     end
 
+    def same_meaning_template?(other)
+      Set.new(meaning.keys) == Set.new(other.meaning.keys)
+    end
+
     # A backslash-delimited list of allomorph transcriptions followed by a
     # meaning.
     def to_s
@@ -515,6 +519,22 @@ module PhoneticAlign
     # [_ops_] list of edit operations
     def match_rate(ops = nil)
       ops = edit_operations if ops.nil?
+      match = 0
+      ops.each_with_index do |op, i|
+        if source_alignment[i].kind_of?(SurfaceMorpheme) and
+           dest_alignment[i].kind_of?(SurfaceMorpheme)
+          # Aligned surface morpheme count as a match.
+          match += 1
+        else
+          # Aligned phones count as a match if they are the same.
+          match += op.nil? ? 1 : 0
+        end
+      end
+      match/ops.length.to_f
+    end
+
+    def oldmatch_rate(ops = nil)
+      ops = edit_operations if ops.nil?
       match = slots = 0
       ops.each_with_index do |op, i|
         if source_alignment[i].kind_of?(SurfaceMorpheme) or
@@ -534,6 +554,7 @@ module PhoneticAlign
       end
       match/slots.to_f
     end
+
 
     # Divide the alignment into segments
     #
@@ -558,8 +579,8 @@ module PhoneticAlign
     # The cost of substituting one segment for another in an alignment is
     # equal to the distance between them.
     #
-    # [_item1_] a Phone or Morpheme
-    # [_item2_] a Phone or Morpheme
+    # [_item1_] a Phone, SurfaceMorpheme, or nil
+    # [_item2_] a Phone, SurfaceMorpheme, or nil
     #
     # This function is called by the parent class.
     def substitute(item1, item2)
@@ -569,10 +590,8 @@ module PhoneticAlign
         # Insertions and deletions have a cost of 1.
         1
       elsif item1.is_a?(SurfaceMorpheme) and item2.is_a?(SurfaceMorpheme)
-        # Morphemes only align with compatible morphemes.
-        item1.is_compatible?(item2) ? 0 : @@INFINITY
-        # TODO Align morphemes with same meaning but different phonetic
-        # component.
+        # Align morphemes with same meaning template.
+        item1.same_meaning_template?(item2) ? 0 : @@INFINITY
       elsif item1.is_a?(Phone) and item2.is_a?(Phone)
         # The substitution cost of non-equal phones is a function of their
         # phonetic distance.

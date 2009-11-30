@@ -18,7 +18,7 @@ module PhoneticAlign
     # Display all the analyses in the beam ranked by coverage.
     def to_s
       analyses = @beam + @completed
-      analyses = analyses.sort_by {|analysis| -analysis.coverage}
+      analyses = analyses.sort_by {|analysis| -analysis.phonetic_coverage}
       "Beam Search: #{@beam.length + @completed.length} beams, " +
       "#{@beam.length} active\n" + analyses.join("\n\n")
     end
@@ -40,7 +40,6 @@ module PhoneticAlign
       end
       # Keep the top @width beams active.
       new_beam = new_beam.sort_by {|analysis| -analysis.score}
-      # TODO Collapse beams that make the same predictions.
       @beam = new_beam.uniq[0...@width]
     end
     
@@ -96,6 +95,9 @@ module PhoneticAlign
     # MorphologicalAnalysis object because it stores EditAlign objects, which
     # contain Hashes with default values.
     def deep_copy
+      # TODO Could also have Alignment copy structures over from
+      # EditAlign::Alingment instead inheriting so that we could deep copy the
+      # entire analysis object with one Marshal call.
       analysis_copy = self.clone
       analysis_copy.morphemes = Marshal.load(Marshal.dump(morphemes))
       analysis_copy.word_list = Marshal.load(Marshal.dump(word_list))
@@ -163,7 +165,7 @@ module PhoneticAlign
       morpheme_hypotheses = hypothesize_morphemes(alignments)
       return [] if morpheme_hypotheses.empty?
       equivalence_classes = collect_morpheme_hypotheses(morpheme_hypotheses)
-      new_morphemes = best_new_morphemes(equivalence_classes)
+      new_morphemes = scored_new_morphemes(equivalence_classes)
       insert_morphemes_into_analyses(new_morphemes)
     end
 
@@ -214,12 +216,11 @@ module PhoneticAlign
                                                @powerset_search_cutoff)
     end
 
-    # Return a list of the highest-ranked sets of equivalent morpheme
-    # hypotheses based on the sum of the match rates of the alignments in
-    # which they appear.
+    # Return a list of the sets of equivalent morpheme hypotheses based on the
+    # sum of the match rates of the alignments in which they appear.
     #
     # [<em>equivalence_classes</em>] set of morpheme equivalence classes
-    def best_new_morphemes(equivalence_classes)
+    def scored_new_morphemes(equivalence_classes)
       new_morphemes = []
       equivalence_classes.each_equivalence_class do |allomorphs, hyps|
         morpheme = Morpheme.new(allomorphs, hyps.first.meaning)
