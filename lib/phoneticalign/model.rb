@@ -139,6 +139,9 @@ module PhoneticAlign
   end
 
 
+  # TODO Should have a PhoneSequence class that initializes from a string and defines transcription
+
+
   # A set of allomorphs for a morpheme.
   class AllomorphSet < Set
     # Create the allomorph set
@@ -157,9 +160,7 @@ module PhoneticAlign
       end
       super(allomorphs)
     end
-    
-    # TODO Define == operator
-    
+
     # Display sorted allomorphs delimited by '/'.
     def to_s
       to_a.map do |allomorph|
@@ -172,7 +173,7 @@ module PhoneticAlign
     def is_compatible?(other)
       subset?(other) or other.subset?(self)
     end
-    
+
   end
 
 
@@ -207,7 +208,7 @@ module PhoneticAlign
       @meaning = meaning
     end
 
-    # Morphemes are equal if they are compatible.
+    # Morphemes are equal if their allomorphs and meanings are the same.
     def ==(other)
       allomorphs == other.allomorphs and meaning == other.meaning
     end
@@ -222,11 +223,6 @@ module PhoneticAlign
     # hash keys.
     def hash
       [allomorphs, meaning].hash
-    end
-
-    # The number of phones in the longest allomorph.
-    def length
-      allomorphs.map { |allomorph| allomorph.length }.max
     end
 
     # Two morphemes are compatible if they have the same meaning and the
@@ -253,17 +249,70 @@ module PhoneticAlign
   end
 
 
-  # A word is a pairing of a sequence of morphemes and phones with a meaning.
+  # An instance of a morpheme that appears in a particular word.
+  #
+  # This refines that Morpheme object with a surface form, which is the
+  # sequence of phones that appear in this particular instance.
+  class SurfaceMorpheme < Morpheme
+    attr_reader :surface_form
+
+    def initialize(meaning, surface_form, allomorphs = nil)
+      if surface_form.kind_of?(String)
+        surface_form = surface_form.split("").map { |s| Phone.new(s) }
+      end
+      @surface_form = surface_form
+      allomorphs = case allomorphs
+      when nil
+        AllomorphSet.new([surface_form])
+      when AllomorphSet
+        allomorphs
+      else
+        AllomorphSet.new(allomorphs)
+      end
+      if not allomorphs.include?(surface_form)
+        raise ArgumentError.new("#{surface_form} is not one " +
+                                "of the allomorphs #{allomorphs.inspect}")
+      end
+      super(allomorphs, meaning)
+    end
+
+    # Surface morphemes are equal if their surface forms, allomorphs and
+    # meanings are the same.
+    def ==(other)
+      super and surface_form == other.surface_form
+    end
+
+    # A transcription of the surface form inside square brackets.
+    def transcription
+      "[#{surface_form_transcription}]"
+    end
+
+    # The number of phones in the surface form.
+    def length
+      surface_form.length
+    end
+
+    protected
+
+    def surface_form_transcription
+      surface_form.map { |phone| phone.ipa }.join
+    end
+    
+  end
+
+
+  # A word is a pairing of a sequence of surfaces morphemes and phones with a
+  # meaning.
   class Word
-    # A sequence of Morpheme and Phone objects
+    # A sequence of SurfaceMorpheme and Phone objects
     attr_accessor :phonetic_component
     # A FeatureValueMatrix representing the meaning
     attr_reader :meaning
 
     # Create a word
     #
-    # [<em>phonetic_component</em>] a sequence of Morpheme and Phone objects
-    #                               or a string
+    # [<em>phonetic_component</em>] a sequence of SurfaceMorpheme and Phone
+    #                               objects or a string
     # [_meaning_] a FeatureValueMatrix representing the word's meaning
     #
     # If a string is given for <em>phonetic_component</em> it is converted
@@ -438,14 +487,12 @@ module PhoneticAlign
       ops = edit_operations if ops.nil?
       match = slots = 0
       ops.each_with_index do |op, i|
-        if source_alignment[i].kind_of?(Morpheme) or
-           dest_alignment[i].kind_of?(Morpheme)
-          # Morphemes count for as many matches as their length in phones.
+        if source_alignment[i].kind_of?(SurfaceMorpheme) or
+           dest_alignment[i].kind_of?(SurfaceMorpheme)
+          # Surface morphemes count for as many matches as their length in phones.
           lengths = []
-          # TODO Should use the acutal number of phones in this word's
-          # segment, not phone lengths from allomorphs in other words.
           [source_alignment[i], dest_alignment[i]].map do |w|
-            lengths << w.length if w.kind_of?(Morpheme)
+            lengths << w.length if w.kind_of?(SurfaceMorpheme)
           end
           match += lengths.max
           slots += lengths.max
@@ -491,7 +538,7 @@ module PhoneticAlign
       elsif item1.nil? or item2.nil?
         # Insertions and deletions have a cost of 1.
         1
-      elsif item1.is_a?(Morpheme) and item2.is_a?(Morpheme)
+      elsif item1.is_a?(SurfaceMorpheme) and item2.is_a?(SurfaceMorpheme)
         # Morphemes only align with compatible morphemes.
         item1.is_compatible?(item2) ? 0 : @@INFINITY
         # TODO Align morphemes with same meaning but different phonetic
@@ -593,13 +640,13 @@ module PhoneticAlign
       if different_segments.length == 1
         different_segment = different_segments.first
         if different_segment.is_phones?(:source)
-          morph = Morpheme.new([different_segment.phonetic_component(:source)],
-                               source_word.meaning - dest_word.meaning)
+          morph = SurfaceMorpheme.new(source_word.meaning - dest_word.meaning,
+                                      different_segment.phonetic_component(:source))
           yield MorphemeHypothesis.new(different_segment, :source, morph)
         end
         if different_segment.is_phones?(:dest)
-          morph = Morpheme.new([different_segment.phonetic_component(:dest)],
-                               dest_word.meaning - source_word.meaning)
+          morph = SurfaceMorpheme.new(dest_word.meaning - source_word.meaning,
+                                      different_segment.phonetic_component(:dest))
           yield MorphemeHypothesis.new(different_segment, :dest, morph)
         end
       end
@@ -615,10 +662,12 @@ module PhoneticAlign
           # morpheme.
           source_allomorph = same_segment.phonetic_component(:source)
           dest_allomorph = same_segment.phonetic_component(:dest)
-          morph = Morpheme.new([source_allomorph, dest_allomorph],
-                               shared_meaning)
-          yield MorphemeHypothesis.new(same_segment, :source, morph)
-          yield MorphemeHypothesis.new(same_segment, :dest, morph)
+          source_morph = SurfaceMorpheme.new(shared_meaning, source_allomorph,
+                                             [source_allomorph, dest_allomorph])
+          yield MorphemeHypothesis.new(same_segment, :source, source_morph)
+          dest_morph = SurfaceMorpheme.new(shared_meaning, dest_allomorph,
+                                          [source_allomorph, dest_allomorph])
+          yield MorphemeHypothesis.new(same_segment, :dest, dest_morph)
         end
       end
       # If a given word has only one phonetic segment, hypothesize that its
@@ -647,7 +696,8 @@ module PhoneticAlign
           meaning = word_meaning - morpheme_meaning
           if not meaning.empty?
             phone_segment = phone_sequences.first
-            morph = Morpheme.new([phone_segment.phonetic_component(word)], meaning)
+            morph = SurfaceMorpheme.new(meaning,
+                                  phone_segment.phonetic_component(word))
             yield MorphemeHypothesis.new(phone_sequences.first, word, morph)
           end
         end

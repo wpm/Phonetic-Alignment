@@ -52,11 +52,12 @@ def happy_unhappy_unhappiness
   happy_meaning = PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy]
   ness_meaning = PhoneticAlign::FeatureValueMatrix[:POS => :noun]
   # Morphemes
-  un_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("un")], un_meaning)
-  happy_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("happy")], happy_meaning)
-  happy_happi_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("happy"),
-                                                   phone_table.phone_sequence("happi")], happy_meaning)
-  ness_morph = PhoneticAlign::Morpheme.new([phone_table.phone_sequence("ness")], ness_meaning)
+  un_morph = PhoneticAlign::SurfaceMorpheme.new(un_meaning, phone_table.phone_sequence("un"))
+  happy_morph = PhoneticAlign::SurfaceMorpheme.new(happy_meaning, phone_table.phone_sequence("happy"))
+  happy_happi_morph = PhoneticAlign::SurfaceMorpheme.new(happy_meaning, phone_table.phone_sequence("happi"), 
+                                                         [phone_table.phone_sequence("happy"),
+                                                          phone_table.phone_sequence("happi")])
+  ness_morph = PhoneticAlign::SurfaceMorpheme.new(ness_meaning, phone_table.phone_sequence("ness"))
   # Words consisting of all phones.
   happy_p = PhoneticAlign::Word.new(phone_table.phone_sequence("happy"), happy_meaning)
   unhappy_p = PhoneticAlign::Word.new(phone_table.phone_sequence("unhappy"), un_meaning + happy_meaning)
@@ -331,13 +332,6 @@ class MorphemeTestCase < Test::Unit::TestCase
       assert_equal(happy_happi2.allomorphs, PhoneticAlign::AllomorphSet.new([happy, happi]))
     end
 
-    should "have a length equal to the number of phones in its longest allomorph" do
-      assert_equal(1, @s.length)
-      assert_equal(1, @z.length)
-      assert_equal(1, @sz.length)
-      assert_equal(2, @ed.length)
-    end
-
     should "have a transcription that is a backslash-delimited list of allomorph transcriptions" do
       assert_equal("[s]", @s.transcription)
       assert_equal("[s/z]", @sz.transcription)
@@ -384,6 +378,27 @@ class MorphemeTestCase < Test::Unit::TestCase
 end
 
 
+class SurfaceMorphemeTestCase < Test::Unit::TestCase
+  context "A SurfaceMorpheme" do
+    setup do
+      @m = PhoneticAlign::SurfaceMorpheme.new({:F => :v}, "aa", ["aa", "b"])
+    end
+    
+    should "have a meaning" do
+      assert_equal(PhoneticAlign::FeatureValueMatrix[:F => :v], @m.meaning)
+    end
+    
+    should "have a surface form" do
+      assert_equal("aa".split("").map { |p| PhoneticAlign::Phone.new(p) }, @m.surface_form)
+    end
+    
+    should "have a length equal to the number of phones in the surface form" do
+      assert_equal(2, @m.length)
+    end
+  end
+end
+
+
 class AllomorphSetTestCase < Test::Unit::TestCase
   context "Allomorph sets" do
     setup do
@@ -392,12 +407,19 @@ class AllomorphSetTestCase < Test::Unit::TestCase
       @happi = phone_table.phone_sequence("happi")
       @ness = phone_table.phone_sequence("ness")
     end
-    
+
     should "be created from lists of phoneme sequences" do
       s = PhoneticAlign::AllomorphSet.new([@happy, @happi])
       assert_equal(Set.new([@happy, @happi]), s)
     end
-    
+
+    should "be created from lists of strings" do
+      allomorphs = PhoneticAlign::AllomorphSet.new(["dog", "cat"])
+      dog = "dog".split("").map { |p| PhoneticAlign::Phone.new(p) }
+      cat = "cat".split("").map { |p| PhoneticAlign::Phone.new(p) }
+      assert_equal(Set.new([dog, cat]), allomorphs)
+    end
+
     should "be compatible iff one is a subset of another" do
       happy = PhoneticAlign::AllomorphSet.new([@happy])
       happy_happi = PhoneticAlign::AllomorphSet.new([@happy, @happi])
@@ -409,7 +431,7 @@ class AllomorphSetTestCase < Test::Unit::TestCase
       assert((not happy_happi.is_compatible?(ness)))
       assert((not ness.is_compatible?(happy_happi)))
     end
-    
+
     should "be able to serve as hash keys" do
       happy1 = PhoneticAlign::AllomorphSet.new([@happy])
       happy2 = PhoneticAlign::AllomorphSet.new([@happy])
@@ -418,14 +440,14 @@ class AllomorphSetTestCase < Test::Unit::TestCase
       assert_equal(h[happy2], :value)
       assert_nil(h[ness])
     end
-    
+
     should "stringify with allomorphs sorted and delimited by /" do
       happy = PhoneticAlign::AllomorphSet.new([@happy])
       assert_equal("happy", happy.to_s)
       happy_happi = PhoneticAlign::AllomorphSet.new([@happy, @happi])
       assert_equal("happi/happy", happy_happi.to_s)
     end
-    
+
   end
 end
 
@@ -437,10 +459,12 @@ class WordTestCase < Test::Unit::TestCase
       @a = PhoneticAlign::Phone.new("a")
       @t = PhoneticAlign::Phone.new("t")
       @s = PhoneticAlign::Phone.new("s")
+      @z = PhoneticAlign::Phone.new("z")
       @lemma_cat = PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat]
       @number_plural = PhoneticAlign::FeatureValueMatrix[:NUMBER => :plural]
-      @cat_morph = PhoneticAlign::Morpheme.new([[@c, @a, @t]], @lemma_cat)
-      @s_morph = PhoneticAlign::Morpheme.new([[@s]], @number_plural)
+      @cat_morph = PhoneticAlign::SurfaceMorpheme.new(@lemma_cat, [@c, @a, @t])
+      @s_morph = PhoneticAlign::SurfaceMorpheme.new(@number_plural, [@s])
+      @sz_morph = PhoneticAlign::SurfaceMorpheme.new(@number_plural, [@s], [[@s], [@z]])
       @cats_meaning = PhoneticAlign::FeatureValueMatrix[:LEMMA => :cat, :NUMBER => :plural]
       @dogs = PhoneticAlign::Word.new("dogs",
                                       PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
@@ -545,10 +569,8 @@ class WordTestCase < Test::Unit::TestCase
       assert_equal("[cat]s: [LEMMA = cat, NUMBER = plural]", w.to_s)
       w = PhoneticAlign::Word.new([@cat_morph, @s_morph], @cats_meaning)
       assert_equal("[cat][s]: [LEMMA = cat, NUMBER = plural]", w.to_s)
-      z = PhoneticAlign::Phone.new("z")
-      sz_morph = PhoneticAlign::Morpheme.new([[@s], [z]], @number_plural)
-      w = PhoneticAlign::Word.new([@cat_morph, sz_morph], @cats_meaning)
-      assert_equal("[cat][s/z]: [LEMMA = cat, NUMBER = plural]", w.to_s)
+      w = PhoneticAlign::Word.new([@cat_morph, @sz_morph], @cats_meaning)
+      assert_equal("[cat][s]: [LEMMA = cat, NUMBER = plural]", w.to_s)
     end
 
     should "have a transcription without the meaning matrix" do
@@ -558,10 +580,8 @@ class WordTestCase < Test::Unit::TestCase
       assert_equal("[cat]s", w.transcription)
       w = PhoneticAlign::Word.new([@cat_morph, @s_morph], @cats_meaning)
       assert_equal("[cat][s]", w.transcription)
-      z = PhoneticAlign::Phone.new("z")
-      sz_morph = PhoneticAlign::Morpheme.new([[@s], [z]], @number_plural)
-      w = PhoneticAlign::Word.new([@cat_morph, sz_morph], @cats_meaning)
-      assert_equal("[cat][s/z]", w.transcription)
+      w = PhoneticAlign::Word.new([@cat_morph, @sz_morph], @cats_meaning)
+      assert_equal("[cat][s]", w.transcription)
     end
 
   end
@@ -1135,14 +1155,24 @@ class MorphemeHypothesisTestCase < Test::Unit::TestCase
     setup do
       words = happy_unhappy_unhappiness
       @phone_table = words.phone_table
+      # Algnment happy/unhappy and happy/unhappiness.
       happy_unhappy = PhoneticAlign::Alignment.new(words.happy_p, words.unhappy_p).segmentation(0.5) # dist(i,y) <= 0.5
       happy_unhappiness = PhoneticAlign::Alignment.new(words.happy_p, words.unhappiness_p).segmentation(0.5) # dist(i,y) <= 0.5
-      happy_morph = PhoneticAlign::Morpheme.new([happy_unhappy[1].phonetic_component(:source)], words.happy_meaning)
+      # @happy_1 is the morpheme hypothesis for "happy" in the source word of the happy/unhappy alignment.
+      happy_morph = PhoneticAlign::SurfaceMorpheme.new(words.happy_meaning, happy_unhappy[1].phonetic_component(:source))
       @happy1 = PhoneticAlign::MorphemeHypothesis.new(happy_unhappy[1], :source, happy_morph)
-      happy_happi_morph = PhoneticAlign::Morpheme.new([happy_unhappiness[1].phonetic_component(:source),
-                                                       happy_unhappiness[1].phonetic_component(:dest)], words.happy_meaning)
-      @happy2 = PhoneticAlign::MorphemeHypothesis.new(happy_unhappiness[1], :source, happy_happi_morph)
-      @happi = PhoneticAlign::MorphemeHypothesis.new(happy_unhappiness[1], :dest, happy_happi_morph)
+      # @happy_2 is the morpheme hypothesis for "happy" in the source word of the happy/unhappiness alignment.
+      happy_morph = PhoneticAlign::SurfaceMorpheme.new(words.happy_meaning,
+                                  happy_unhappiness[1].phonetic_component(:source),
+                                  [happy_unhappiness[1].phonetic_component(:source),
+                                   happy_unhappiness[1].phonetic_component(:dest)])
+      @happy2 = PhoneticAlign::MorphemeHypothesis.new(happy_unhappiness[1], :source, happy_morph)
+      # @happi is the morpheme hypothesis for "happi" in the dest word of the happy/unhappiness alignment.
+      happi_morph = PhoneticAlign::SurfaceMorpheme.new(words.happy_meaning,
+                                  happy_unhappiness[1].phonetic_component(:dest),
+                                  [happy_unhappiness[1].phonetic_component(:source),
+                                   happy_unhappiness[1].phonetic_component(:dest)])
+      @happi = PhoneticAlign::MorphemeHypothesis.new(happy_unhappiness[1], :dest, happi_morph)
     end
     
     should "contain Morpheme objects" do
@@ -1152,8 +1182,9 @@ class MorphemeHypothesisTestCase < Test::Unit::TestCase
       # II|     
       #   |^^^^^
       # 0.7143
-      expected = PhoneticAlign::Morpheme.new([@phone_table.phone_sequence("happy")],
-                                             PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
+      expected = PhoneticAlign::SurfaceMorpheme.new(
+                            PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy],
+                            @phone_table.phone_sequence("happy"))
       assert_equal(expected, @happy1.morpheme)
       # happi/happy: [LEMMA = happy]
       # --|happy|---- <==
@@ -1161,9 +1192,11 @@ class MorphemeHypothesisTestCase < Test::Unit::TestCase
       # II|    S|IIII
       #   |^^^^^|    
       # 0.3636
-      expected = PhoneticAlign::Morpheme.new([@phone_table.phone_sequence("happy"),
-                                              @phone_table.phone_sequence("happi")],
-                                             PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
+      expected = PhoneticAlign::SurfaceMorpheme.new(
+                            PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy],
+                            @phone_table.phone_sequence("happy"),
+                            [@phone_table.phone_sequence("happy"),
+                             @phone_table.phone_sequence("happi")])
       assert_equal(expected, @happy2.morpheme)
       # happi/happy: [LEMMA = happy]
       # --|happy|----
@@ -1171,9 +1204,11 @@ class MorphemeHypothesisTestCase < Test::Unit::TestCase
       # II|    S|IIII
       #   |^^^^^|    
       # 0.3636
-      expected = PhoneticAlign::Morpheme.new([@phone_table.phone_sequence("happy"),
-                                              @phone_table.phone_sequence("happi")],
-                                             PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
+      expected = PhoneticAlign::SurfaceMorpheme.new(
+                            PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy],
+                            @phone_table.phone_sequence("happi"),
+                            [@phone_table.phone_sequence("happy"),
+                             @phone_table.phone_sequence("happi")])
       assert_equal(expected, @happi.morpheme)
     end
     
@@ -1182,8 +1217,8 @@ class MorphemeHypothesisTestCase < Test::Unit::TestCase
       assert_equal(@happy2.meaning, PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
       assert_equal(@happi.meaning, PhoneticAlign::FeatureValueMatrix[:LEMMA => :happy])
       assert_equal("[happy]", @happy1.transcription)
-      assert_equal("[happi/happy]", @happy2.transcription)
-      assert_equal("[happi/happy]", @happi.transcription)
+      assert_equal("[happy]", @happy2.transcription)
+      assert_equal("[happi]", @happi.transcription)
     end    
     
     should "have the match rate of the alignment as an attribute" do
@@ -1203,7 +1238,7 @@ II|
 EOTEXT
       assert_equal(expected.strip, @happy1.to_s, "Expected\n#{expected.strip}\nGot\n#{@happy1.to_s}")
       expected = <<-EOTEXT
-[happi/happy]: [LEMMA = happy]
+[happy]: [LEMMA = happy]
 --|happy|---- <==
 un|happi|ness
 II|    S|IIII
@@ -1212,7 +1247,7 @@ II|    S|IIII
 EOTEXT
       assert_equal(expected.strip, @happy2.to_s, "Expected\n#{expected.strip}\nGot\n#{@happy2.to_s}")
       expected = <<-EOTEXT
-[happi/happy]: [LEMMA = happy]
+[happi]: [LEMMA = happy]
 --|happy|----
 un|happi|ness <==
 II|    S|IIII
@@ -1276,8 +1311,7 @@ class CreeTestCase < Test::Unit::TestCase
       #     |III
       #     |^^^
       # 0.5714
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("wak")],
-                                          PhoneticAlign::FeatureValueMatrix[:NUMBER => :plural])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:NUMBER => :plural}, @cree_phones.phone_sequence("wak"))
       wak_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest, morph)
       assert_equal(wak_hyp, morpheme_hyps[0], "Expected\n#{wak_hyp}\nGot\n#{morpheme_hyps[0]}")
       # atim: [DISTANCE = proximate, LEMMA = dog]
@@ -1286,9 +1320,7 @@ class CreeTestCase < Test::Unit::TestCase
       #     |III
       # ^^^^|   
       # 0.5714
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")],
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
-                                                                            :DISTANCE => :proximate])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog, :DISTANCE => :proximate}, @cree_phones.phone_sequence("atim"))
       atim_source_hyp1 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
       assert_equal(atim_source_hyp1, morpheme_hyps[1], "Expected\n#{atim_source_hyp1}\nGot\n#{morpheme_hyps[1]}")
       # atim: [DISTANCE = proximate, LEMMA = dog]
@@ -1297,9 +1329,7 @@ class CreeTestCase < Test::Unit::TestCase
       #     |III
       # ^^^^|   
       # 0.5714
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")],
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
-                                                                            :DISTANCE => :proximate])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog, :DISTANCE => :proximate}, @cree_phones.phone_sequence("atim"))
       atim_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest, morph)
       assert_equal(atim_dest_hyp, morpheme_hyps[2], "Expected\n#{atim_dest_hyp}\nGot\n#{morpheme_hyps[2]}")
       # atim: [DISTANCE = proximate, LEMMA = dog, NUMBER = singular]
@@ -1308,10 +1338,9 @@ class CreeTestCase < Test::Unit::TestCase
       #     |III
       # ^^^^|   
       # 0.5714
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")],
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
-                                                                            :DISTANCE => :proximate,
-                                                                            :NUMBER => :singular])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog,
+                                                  :DISTANCE => :proximate,
+                                                  :NUMBER => :singular}, @cree_phones.phone_sequence("atim"))
       atim_source_hyp2 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
       assert_equal(atim_source_hyp2, morpheme_hyps[3], "Expected\n#{atim_source_hyp2}\nGot\n#{morpheme_hyps[3]}")
     end
@@ -1338,8 +1367,7 @@ class CreeTestCase < Test::Unit::TestCase
       #     |II
       #     |^^
       # 0.6667
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("wa")],
-                                          PhoneticAlign::FeatureValueMatrix[:DISTANCE => :obviate])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:DISTANCE => :obviate}, @cree_phones.phone_sequence("wa"))
       wa_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest, morph)
       assert_equal(wa_hyp, morpheme_hyps[0], "Expected\n#{wa_hyp}\nGot\n#{morpheme_hyps[0]}")
       # atim: [LEMMA = dog, NUMBER = singular]
@@ -1348,9 +1376,7 @@ class CreeTestCase < Test::Unit::TestCase
       #     |II
       # ^^^^|  
       # 0.6667
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")], 
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
-                                                                            :NUMBER => :singular])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog, :NUMBER => :singular}, @cree_phones.phone_sequence("atim"))
       atim_source_hyp1 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
       assert_equal(atim_source_hyp1, morpheme_hyps[1], "Expected\n#{atim_source_hyp1}\nGot\n#{morpheme_hyps[1]}")
       # atim: [LEMMA = dog, NUMBER = singular]
@@ -1359,9 +1385,7 @@ class CreeTestCase < Test::Unit::TestCase
       #     |II
       # ^^^^|  
       # 0.6667
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")], 
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
-                                                                            :NUMBER => :singular])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog, :NUMBER => :singular}, @cree_phones.phone_sequence("atim"))
       atim_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest, morph)
       assert_equal(atim_dest_hyp, morpheme_hyps[2], "Expected\n#{atim_dest_hyp}\nGot\n#{morpheme_hyps[2]}")
       # atim: [LEMMA = dog, DISTANCE = proximate, NUMBER = singular]
@@ -1370,10 +1394,8 @@ class CreeTestCase < Test::Unit::TestCase
       #     |II
       # ^^^^|  
       # 0.6667
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atim")], 
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
-                                                                            :DISTANCE => :proximate,
-                                                                            :NUMBER => :singular])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog, :DISTANCE => :proximate, :NUMBER => :singular},
+                                                 @cree_phones.phone_sequence("atim"))
       atim_source_hyp2 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
       assert_equal(atim_source_hyp2, morpheme_hyps[3], "Expected\n#{atim_source_hyp2}\nGot\n#{morpheme_hyps[3]}")
     end
@@ -1401,9 +1423,7 @@ class CreeTestCase < Test::Unit::TestCase
       #       |I
       #       |^
       # 0.8571
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("k")],
-                                          PhoneticAlign::FeatureValueMatrix[:NUMBER => :plural,
-                                                                            :DISTANCE => :proximate])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:NUMBER => :plural, :DISTANCE => :proximate}, @cree_phones.phone_sequence("k"))
       k_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[1], :dest, morph)
       assert_equal(k_hyp, morpheme_hyps[0], "Expected\n#{k_hyp}\nGot#{morpheme_hyps[0]}")
       # atimwa: [LEMMA = dog]
@@ -1412,8 +1432,7 @@ class CreeTestCase < Test::Unit::TestCase
       #       |I
       # ^^^^^^| 
       # 0.8571
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atimwa")],
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog}, @cree_phones.phone_sequence("atimwa"))
       atimwa_source_hyp1 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
       assert_equal(atimwa_source_hyp1, morpheme_hyps[1], "Expected\n#{atimwa_source_hyp1}\nGot\n#{morpheme_hyps[1]}")
       # atimwa: [LEMMA = dog]
@@ -1422,8 +1441,7 @@ class CreeTestCase < Test::Unit::TestCase
       #       |I
       # ^^^^^^| 
       # 0.8571
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atimwa")],
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog}, @cree_phones.phone_sequence("atimwa"))
       atimwa_dest_hyp = PhoneticAlign::MorphemeHypothesis.new(segments[0], :dest, morph)
       assert_equal(atimwa_dest_hyp, morpheme_hyps[2], "Expected\n#{atimwa_dest_hyp}\nGot\n#{morpheme_hyps[2]}")
       # atimwa: [LEMMA = dog]
@@ -1432,10 +1450,9 @@ class CreeTestCase < Test::Unit::TestCase
       #       |I
       # ^^^^^^| 
       # 0.8571
-      morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("atimwa")],
-                                          PhoneticAlign::FeatureValueMatrix[:LEMMA => :dog,
-                                                                            :DISTANCE => :obviate,
-                                                                            :NUMBER => :singular])
+      morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog,
+                                                  :DISTANCE => :obviate,
+                                                  :NUMBER => :singular}, @cree_phones.phone_sequence("atimwa"))
       atimwa_source_hyp2 = PhoneticAlign::MorphemeHypothesis.new(segments[0], :source, morph)
       assert_equal(atimwa_source_hyp2, morpheme_hyps[3], "Expected\n#{atimwa_source_hyp2}\nGot\n#{morpheme_hyps[3]}")
     end
@@ -1549,16 +1566,15 @@ class CreeTestCase < Test::Unit::TestCase
 
   context "An alignment" do
     should "never hypothesize a morpheme with an empty meaning" do
-      atim_morph = PhoneticAlign::Morpheme.new(["atim"], {:LEMMA => :dog})
-      k_morph = PhoneticAlign::Morpheme.new(["k"], {:DISTANCE => :proximate, :NUMBER => :plural})
+      atim_morph = PhoneticAlign::SurfaceMorpheme.new({:LEMMA => :dog}, @cree_phones.phone_sequence("atim"))
+      k_morph = PhoneticAlign::SurfaceMorpheme.new({:DISTANCE => :proximate, :NUMBER => :plural}, @cree_phones.phone_sequence("k"))
       @atimwa.phonetic_component[0..3] = atim_morph
       @atimwak.phonetic_component[0..3] = atim_morph
       @atimwak.phonetic_component[3..3] = k_morph
       segmentation = PhoneticAlign::Alignment.new(@atimwa, @atimwak).segmentation
       morpheme_hypotheses = []
       segmentation.each_morpheme_hypothesis {|hyp| morpheme_hypotheses << hyp}
-      wa_morph = PhoneticAlign::Morpheme.new([@cree_phones.phone_sequence("wa")],
-                    {:DISTANCE => :obviate, :NUMBER => :singular})
+      wa_morph = PhoneticAlign::SurfaceMorpheme.new({:DISTANCE => :obviate, :NUMBER => :singular}, @cree_phones.phone_sequence("wa"))
       # Should return a single morpheme hypothesis for wa
       #
       # [wa]: [DISTANCE = obviate, NUMBER = singular]
