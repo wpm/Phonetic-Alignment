@@ -83,7 +83,7 @@ module PhoneticAlign
     #
     # [_s_] A phonological transcription string
     def phone_sequence(s)
-      phones = []
+      phones = PhoneSequence.new
       s.scan(@seg_regex) do |seg|
         begin
           phones << fetch(seg)

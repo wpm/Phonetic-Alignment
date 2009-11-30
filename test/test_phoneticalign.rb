@@ -299,6 +299,28 @@ class PhoneTestCase < Test::Unit::TestCase
 end
 
 
+class PhoneSequenceTestCase < Test::Unit::TestCase
+  context "A PhoneSequence" do
+    should "be created from a string" do
+      expected = ["a", "b", "c"].map { |s| PhoneticAlign::Phone.new(s) }
+      assert_equal(expected, PhoneticAlign::PhoneSequence.new("abc"))
+    end
+    
+    should "be created from an array of phones" do
+      a = PhoneticAlign::Phone.new("a", {:f1 => :v1})
+      b = PhoneticAlign::Phone.new("b", {:f2 => :v2})
+      assert_equal([a, b], PhoneticAlign::PhoneSequence.new([a,b]))
+    end
+    
+    should "have an IPA transcription" do
+      a = PhoneticAlign::Phone.new("a", {:f1 => :v1})
+      b = PhoneticAlign::Phone.new("b", {:f2 => :v2})
+      assert_equal("ab", PhoneticAlign::PhoneSequence.new([a,b]).transcription)
+    end
+  end
+end
+
+
 class MorphemeTestCase < Test::Unit::TestCase
   def setup
     @phone_e = PhoneticAlign::Phone.new("e")
@@ -659,6 +681,7 @@ class PhoneTableTestCase < Test::Unit::TestCase
     end
 
     should "segment a string of unigraphs by character" do
+      assert_instance_of(PhoneticAlign::PhoneSequence, @phones.phone_sequence("simiŋ"))
       assert_equal([@phones["s"], @phones["i"], @phones["m"], @phones["i"], @phones["ŋ"]], @phones.phone_sequence("simiŋ"))
     end
 

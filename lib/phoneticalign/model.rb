@@ -139,24 +139,41 @@ module PhoneticAlign
   end
 
 
-  # TODO Should have a PhoneSequence class that initializes from a string and defines transcription
+  # A sequence of phones.
+  class PhoneSequence < Array
+    # Create a phone sequence
+    #
+    # [_phones_] Array of Phone objects or a String
+    #
+    # If _phones_ is a string it is converted into an array of phones with the
+    # characters as IPA and no phonetic features.
+    def initialize(phones = [])
+      if phones.kind_of?(String)
+        phones = phones.split("").map { |p| Phone.new(p) }
+      end
+      super(phones)
+    end
+
+    # The IPA transcription of the phone sequence without the features.
+    def transcription
+      map { |p| p.ipa }.join
+    end
+
+  end
 
 
   # A set of allomorphs for a morpheme.
   class AllomorphSet < Set
     # Create the allomorph set
     #
-    # [_allomorphs_] list of allomorphs or strings
+    # [_allomorphs_] list of PhoneSequence objects or strings
     #
-    # If an item passed in to _allomorphs_ is a string it is converted into an
-    # array of phones with the characters as IPA and no phonetic features.
+    # Items in the _allomorphs_ list are converted the PhoneSequence objects
+    # if they are not PhoneSequences already.
     def initialize(allomorphs)
       allomorphs = allomorphs.map do |allomorph|
-        if allomorph.kind_of?(String)
-          allomorph.split("").map { |s| Phone.new(s) }
-        else
-          allomorph
-        end
+        allomorph.kind_of?(PhoneSequence) ? allomorph :
+                                            PhoneSequence.new(allomorph)
       end
       super(allomorphs)
     end
@@ -164,7 +181,7 @@ module PhoneticAlign
     # Display sorted allomorphs delimited by '/'.
     def to_s
       to_a.map do |allomorph|
-        allomorph.map { |phone| phone.ipa }.join
+        allomorph.transcription
       end.sort.join("/")
     end
     
@@ -186,14 +203,13 @@ module PhoneticAlign
 
     # Create the morpheme from a set of allomorphs and a meaning.
     #
-    # [_meaning_] the meaning
     # [<em>allomorphs</em>] AllomorphSet or list of phone sequences
+    # [_meaning_] the meaning
     #
     # An allomorph is a sequence of phones that represents a possible surface
-    # instantiation of this morpheme.
-    #
-    # If strings are given for the <em>allomorphs</em> these are converted
-    # into lists of Phone objects without phonetic features.
+    # instantiation of this morpheme. If strings are given for the
+    # <em>allomorphs</em> these are converted into lists of Phone objects
+    # without phonetic features.
     #
     # If a hash is given for the meaning, it is converted into a
     # FeatureValueMatrix.
@@ -256,9 +272,29 @@ module PhoneticAlign
   class SurfaceMorpheme < Morpheme
     attr_reader :surface_form
 
+    # Create the morpheme from a set of allomorphs and a meaning.
+    #
+    # [_meaning_] the meaning
+    # [<em>surface_form</em>] the surface form
+    # [<em>allomorphs</em>] AllomorphSet or list of strings or phone sequences
+    #
+    # If a hash is given for the meaning, it is converted into a
+    # FeatureValueMatrix.
+    #
+    # The surface form is the sequence of phones that represents this
+    # morpheme's surface form in a particular context.  If a string is passed
+    # in for this argument, it is converted to a PhoneSequence where the
+    # phones are the characters of the string and have no features.
+    #
+    # An allomorph is a sequence of phones that represents a possible surface
+    # instantiation of this morpheme. If strings are given for the
+    # <em>allomorphs</em> these are converted into lists of Phone objects
+    # without phonetic features.
+    #
+    # The surface form must be included in the set of allomorphs.
     def initialize(meaning, surface_form, allomorphs = nil)
-      if surface_form.kind_of?(String)
-        surface_form = surface_form.split("").map { |s| Phone.new(s) }
+      if not surface_form.kind_of?(PhoneSequence)
+        surface_form = PhoneSequence.new(surface_form)
       end
       @surface_form = surface_form
       allomorphs = case allomorphs
@@ -284,7 +320,7 @@ module PhoneticAlign
 
     # A transcription of the surface form inside square brackets.
     def transcription
-      "[#{surface_form_transcription}]"
+      "[#{surface_form.transcription}]"
     end
 
     # The number of phones in the surface form.
@@ -292,12 +328,6 @@ module PhoneticAlign
       surface_form.length
     end
 
-    protected
-
-    def surface_form_transcription
-      surface_form.map { |phone| phone.ipa }.join
-    end
-    
   end
 
 
