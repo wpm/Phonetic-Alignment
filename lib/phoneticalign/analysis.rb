@@ -183,23 +183,6 @@ module PhoneticAlign
       @alignment_table.indexes.keys
     end
 
-    # Generate alignments for all the word pairs in the list that have
-    # overlapping semantics.
-    def align_all_words
-      0.upto(word_list.length-1) do |i|
-        0.upto(i-1) do |j|
-          w1 = self[i]
-          w2 = self[j]
-          if (w1.meaning & w2.meaning).empty?
-            LOGGER.debug("Skipping alignment for\n" +
-                         "#{w1}\n#{w2}\nbecause they share no meaning")
-            next
-          end
-          @alignment_table.add(Alignment.new(w1, w2), i, j)
-        end
-      end
-    end
-
     # Get morpheme hypotheses from the alignments.
     def hypothesize_morphemes
       morpheme_hypotheses = []
@@ -308,6 +291,25 @@ module PhoneticAlign
           dest_word = self[word_index]
           alignment = Alignment.new(source_word, dest_word)
           @alignment_table.add(alignment, source_index, word_index)
+        end
+      end
+    end
+
+    protected
+
+    # Generate alignments for all the word pairs in the list that have
+    # overlapping semantics.
+    def align_all_words
+      0.upto(word_list.length-1) do |i|
+        0.upto(i-1) do |j|
+          w1 = self[i]
+          w2 = self[j]
+          if (w1.meaning & w2.meaning).empty?
+            LOGGER.debug("Skipping alignment for\n" +
+                         "#{w1}\n#{w2}\nbecause they share no meaning")
+            next
+          end
+          @alignment_table.add(Alignment.new(w1, w2), i, j)
         end
       end
     end
