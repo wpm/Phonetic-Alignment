@@ -83,6 +83,9 @@ module PhoneticAlign
 
     # Phones are equal if they have the same IPA character and features.
     def ==(other)
+      # Do explicit type checking instead of relying on duck typing because
+      # the == operator for Alignment may compare Phones with strings.
+      other.kind_of?(Phone) and
       ipa == other.ipa and
       features == other.features
     end
@@ -226,6 +229,9 @@ module PhoneticAlign
 
     # Morphemes are equal if their allomorphs and meanings are the same.
     def ==(other)
+      # Do explicit type checking instead of relying on duck typing because
+      # the == operator for Alignment may compare Phones with strings.
+      other.kind_of?(Morpheme) and
       allomorphs == other.allomorphs and meaning == other.meaning
     end
 
@@ -426,10 +432,9 @@ module PhoneticAlign
 
 
   # An edit-distance alignment between the phonetic components of two words.
-  class Alignment < EditAlign::Alignment
-    @@INFINITY = 1.0/0
-
+  class Alignment
     attr_reader :source_word, :dest_word
+    attr_reader :source_alignment, :dest_alignment, :edit_operations
 
     # Align two Word objects
     #
@@ -438,7 +443,17 @@ module PhoneticAlign
     def initialize(source, dest)
       @source_word = source
       @dest_word = dest
-      super(source.phonetic_component.clone, dest.phonetic_component.clone)
+      # This function creates an AlignmentResult object, copies out the
+      # necessary data structures, and then discards the object.  We do this
+      # instead of having Alignment inherit from EditAlign::Alignment because
+      # the latter contains Hash objects with default procedures, making it
+      # impossible to deep copy with the Marshal.load(Marshal.dump(object))
+      # idiom.  Deep copy support is needed for the MorphologicalAnalysis
+      # object, which stores a table of Alignments.
+      alignment = AlignmentResult.new(source, dest)
+      @source_alignment = alignment.source_alignment
+      @dest_alignment = alignment.dest_alignment
+      @edit_operations = alignment.edit_operations
       # TODO Push morpheme insertion/deletions outside unaligned phone region.
     end
 
@@ -455,14 +470,16 @@ module PhoneticAlign
     #                               boundary markers
     # [_emphasis_] segment to emphasize [from, to]
     def to_s(segment_boundaries = [], emphasis = nil)
-      # Create the source and destination lines.
-      s_line = source_alignment('-').map do |s|
+      # Create the source and destination lines.  Replace nils with '-' and
+      # other objects with their transcriptions.
+      # TODO Do this more elegantly with case statement.
+      s_line = source_alignment.map {|s| s.nil? ? '-' : s}.map do |s|
         s.respond_to?(:transcription) ? s.transcription : s.to_s
       end
-      d_line = dest_alignment('-').map do |s|
+      d_line = dest_alignment.map {|s| s.nil? ? '-' : s}.map do |s|
         s.respond_to?(:transcription) ? s.transcription : s.to_s
       end
-      # Create short pneumonics for the edit operations.
+      # Create short mnemonics for the edit operations.
       ops = edit_operations.map do |op|
         case op
         when nil
@@ -501,6 +518,32 @@ module PhoneticAlign
       (lines + [(sprintf "%0.4f", match_rate)]).join("\n")
     end
 
+    # Terse stringification with source and dest word transcriptions separated
+    # by a backslash.
+    def inspect
+      "#{source_word.transcription}/#{dest_word.transcription}"
+    end
+
+    # Two alignments are equal if they have the same source alignment, dest
+    # alignment, and edit operations.
+    def ==(other)
+      source_alignment == other.source_alignment and
+      dest_alignment == other.dest_alignment and
+      edit_operations == other.edit_operations
+    end
+
+    # Alignment defines eql? and hash so that we may use Alignment objects as
+    # hash keys.
+    def eql?(other)
+      self == other
+    end
+
+    # Alignment defines eql? and hash so that we may use Alignment objects as
+    # hash keys.
+    def hash
+      [source_alignment, dest_alignment, edit_operations].hash
+    end
+
     # The number of slots in the alignment.
     def length
       edit_operations.length
@@ -533,29 +576,6 @@ module PhoneticAlign
       match/ops.length.to_f
     end
 
-    def oldmatch_rate(ops = nil)
-      ops = edit_operations if ops.nil?
-      match = slots = 0
-      ops.each_with_index do |op, i|
-        if source_alignment[i].kind_of?(SurfaceMorpheme) or
-           dest_alignment[i].kind_of?(SurfaceMorpheme)
-          # Surface morphemes count for as many matches as their length in phones.
-          lengths = []
-          [source_alignment[i], dest_alignment[i]].map do |w|
-            lengths << w.length if w.kind_of?(SurfaceMorpheme)
-          end
-          match += lengths.max
-          slots += lengths.max
-        else
-          # Aligned phones count as one match.
-          match += op.nil? ? 1 : 0
-          slots += 1 
-        end
-      end
-      match/slots.to_f
-    end
-
-
     # Divide the alignment into segments
     #
     # This returns a Segmentation for this alignment.
@@ -563,17 +583,24 @@ module PhoneticAlign
     # [<em>substitution_threshold</em>] difference beneath which phone
     #                                   subsitutions are treated as matching
     def segmentation(substitution_threshold = 0)
+      # TODO This function is dumb.  Caller should call Segmentation.new directly.
       Segmentation.new(self, substitution_threshold)
     end
 
-    # Get the edit operations and cache the result.
-    def edit_operations
-      @edit_operations_cache = super if @edit_operations_cache.nil?
-      @edit_operations_cache
+  end
+
+  # The result of performing an alignment between two Word objects.
+  class AlignmentResult < EditAlign::Alignment
+    @@INFINITY = 1.0/0
+
+    # Align two Word objects
+    #
+    # [_source_] word to align
+    # [_dest_] word to align
+    def initialize(source, dest)
+      super(source.phonetic_component.clone, dest.phonetic_component.clone)
     end
-
-    protected
-
+    
     # The substitution cost function used to perform alignments.
     #
     # The cost of substituting one segment for another in an alignment is
@@ -602,9 +629,8 @@ module PhoneticAlign
         @@INFINITY
       end
     end
-
+    
   end
-
 
   # A division of an Alignment into contiguous segments.
   class Segmentation

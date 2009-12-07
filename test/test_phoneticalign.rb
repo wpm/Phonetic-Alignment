@@ -235,6 +235,11 @@ class PhoneTestCase < Test::Unit::TestCase
       assert_not_equal(p1, p2)
     end
 
+    should "not equal a non-Phone object" do
+      assert_not_equal("p", PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1]))
+      assert_not_equal(nil, PhoneticAlign::Phone.new("p", PhoneticAlign::FeatureValueMatrix[:f1 => :v1]))
+    end
+
     should "handle unicode IPA characters" do
       assert_equal("dʒ", @j.ipa)
       assert_equal(2, @j.ipa.jlength)
@@ -376,6 +381,11 @@ class MorphemeTestCase < Test::Unit::TestCase
       d = PhoneticAlign::Phone.new("d", PhoneticAlign::FeatureValueMatrix[:FORM => :d])
       m = PhoneticAlign::Morpheme.new([[e,d], [e,d]], @past)
       assert_equal(m.allomorphs, Set.new([[e,d]]))
+    end
+
+    should "not equal a non-Morpheme" do
+      assert_not_equal("s", @s)
+      assert_not_equal(nil, @s)
     end
 
   end
@@ -838,7 +848,6 @@ class AlignmentTestCase < Test::Unit::TestCase
       # unhappy
       # II
       align = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
-      assert_equal(2, align.edit_distance)
       assert_equal([:insert, :insert, nil, nil, nil, nil, nil], align.edit_operations, align)
     end
 
@@ -847,7 +856,6 @@ class AlignmentTestCase < Test::Unit::TestCase
       # un  happy
       #  I
       align = PhoneticAlign::Alignment.new(@happy_m, @unhappy_m)
-      assert_equal(1, align.edit_distance)
       assert_equal([:insert, nil], align.edit_operations, align)
     end
 
@@ -856,7 +864,6 @@ class AlignmentTestCase < Test::Unit::TestCase
       #  -     happi/happy   ness
       #  D          S         I
       align = PhoneticAlign::Alignment.new(@unhappy_m, @happy_happi_ness_m)
-      assert_equal(2, align.edit_distance)
       assert_equal([:delete, :substitute, :insert], align.edit_operations, align)
     end
 
@@ -868,7 +875,6 @@ class AlignmentTestCase < Test::Unit::TestCase
       # Note that this alignment is not ideal.  The morpheme un splits the
       # character sequence u,n.
       align = PhoneticAlign::Alignment.new(@unhappy_p, @unhappy_pm)
-      assert_equal(3, align.edit_distance)
       assert_equal([:delete, :insert, :delete, nil, nil, nil, nil, nil], align.edit_operations, align)
     end
 
@@ -877,6 +883,31 @@ class AlignmentTestCase < Test::Unit::TestCase
       @happy_unhappiness = PhoneticAlign::Alignment.new(@happy_p, @unhappiness_p)
       assert_equal(11, @happy_unhappiness.length)
       assert_equal(7, @happy_unhappy.length)
+    end
+
+    should "have an inspect function that prints source transcription/dest transcription" do
+      assert_equal("happy/unhappy", PhoneticAlign::Alignment.new(@happy_p, @unhappy_p).inspect)
+      assert_equal("[happy]/[un][happy]", PhoneticAlign::Alignment.new(@happy_m, @unhappy_m).inspect)
+      assert_equal("unhappy/[un]happy", PhoneticAlign::Alignment.new(@unhappy_p, @unhappy_pm).inspect)
+    end
+
+    should "be equal iff they contain the source and dest alignments and edit operations" do
+      a1 = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
+      a2 = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
+      a3 = PhoneticAlign::Alignment.new(@happy_m, @unhappy_m)
+      assert_equal(a1, a2)
+      assert_not_equal(a1, a3)
+    end
+
+    should "serve as hash keys" do
+      a1 = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
+      a2 = PhoneticAlign::Alignment.new(@happy_p, @unhappy_p)
+      a3 = PhoneticAlign::Alignment.new(@happy_m, @unhappy_m)
+      h = {}
+      h[a1] = 1
+      h[a2] = 2
+      h[a3] = 3
+      assert_equal({a1 => 2, a3 => 3}, h)
     end
 
   end
@@ -1611,3 +1642,4 @@ class CreeTestCase < Test::Unit::TestCase
     end
   end
 end
+

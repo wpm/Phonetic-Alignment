@@ -9,6 +9,8 @@ module PhoneticAlign
   #                                   search for semantic equivalence
   #                                   classes
   class BeamSearch
+    attr_reader :beam, :completed
+    
     def initialize(word_list, width, powerset_search_cutoff)
       @width = width
       @beam = [MorphologicalAnalysis.new(word_list, powerset_search_cutoff)]
@@ -17,16 +19,26 @@ module PhoneticAlign
 
     # Display all the analyses in the beam ranked by coverage.
     def to_s
-      analyses = @beam + @completed
-      analyses = analyses.sort_by {|analysis| -analysis.phonetic_coverage}
-      "Beam Search: #{@beam.length + @completed.length} beams, " +
-      "#{@beam.length} active\n" + analyses.join("\n\n")
+      analyses = beam + completed
+      analyses = analyses.sort
+      "Beam Search: #{length + @completed.length} beams, " +
+      "#{length} active\n" + analyses.join("\n\n")
+    end
+
+    # Return an analysis in the beam.
+    def [](index)
+      beam[index]
+    end
+
+    # The number of active beams.
+    def length
+      beam.length
     end
 
     # Get the next iteration of analyses from the currently active beam.
     def next_iteration!
       new_beam = []
-      @beam.each do |analysis|
+      beam.each do |analysis|
         new_analyses = analysis.next_iteration
         if new_analyses.empty?
           # If there are no new analyses on this beam, move it to the
@@ -45,7 +57,7 @@ module PhoneticAlign
     
     # Are there no more active beams?
     def done?
-      @beam.empty?
+      beam.empty?
     end
   end
 
@@ -58,7 +70,9 @@ module PhoneticAlign
     attr_accessor :word_list
     # Discovered Morpheme objects
     attr_accessor :morphemes
-    attr_accessor :score
+    attr_writer :score
+
+    attr_reader :alignment_table
 
     # Create a morphological analysis
     #
@@ -67,14 +81,20 @@ module PhoneticAlign
     #                                   which we will not do an exhaustive
     #                                   search for semantic equivalence
     #                                   classes
-    def initialize(word_list, powerset_search_cutoff)
+    def initialize(word_list, powerset_search_cutoff = 0)
       @word_list = word_list
       @powerset_search_cutoff = powerset_search_cutoff
       @morphemes = Set.new
-      @score = 0
       # Calculate the number of phones in the word list before we have
       # inserted any morphemes.
       @initial_phones = phones_in_word_list
+      @alignment_table = AlignmentTable.new
+      align_all_words
+    end
+
+    # Sort from largest score to smallest.
+    def <=>(other)
+      other.score <=> score
     end
 
     def ==(other)
@@ -90,28 +110,18 @@ module PhoneticAlign
     end
 
     # Return a deep copy of this object.
-    #
-    # We can't use the Marshal.load(Marshal.dump(self)) on the entire
-    # MorphologicalAnalysis object because it stores EditAlign objects, which
-    # contain Hashes with default values.
     def deep_copy
-      # TODO Could also have Alignment copy structures over from
-      # EditAlign::Alingment instead inheriting so that we could deep copy the
-      # entire analysis object with one Marshal call.
-      analysis_copy = self.clone
-      analysis_copy.morphemes = Marshal.load(Marshal.dump(morphemes))
-      analysis_copy.word_list = Marshal.load(Marshal.dump(word_list))
-      analysis_copy
+      Marshal.load(Marshal.dump(self))
     end
 
     # Display a list of hypothesized morphemes followed by a list of
     # reanalyzed words.
     def to_s
       (
-        ["Coverage #{sprintf '%0.4f', coverage}: " +
+        ["Score #{sprintf '%0.4f', score}: " +
          "#{sprintf '%0.4f', phonetic_coverage} phonetic, " +
          "#{sprintf '%0.4f', semantic_coverage} semantic "] +
-        ["Morphemes"] + ["-" * "Morphemes".length] +
+        ["Morphemes (#{morphemes.length})"] + ["-" * "Morphemes".length] +
          morphemes.to_a.sort_by {|m| m.transcription} +
          ["Word List"] + ["-" * "Word List".length] +
          word_list
@@ -132,13 +142,12 @@ module PhoneticAlign
       end
     end
 
-    # Mesure of how much of the original word list has been analyzed into
-    # morphemes.
-    #
-    # This is the harmonic mean of the phonetic and semantic coverage.
-    def coverage
-      2*phonetic_coverage*semantic_coverage/
-      (phonetic_coverage + semantic_coverage)
+    def score
+      # Cache the score in case it is expensive to generate.
+      if @score.nil?
+        @score = match_rate_objective
+      end
+      @score
     end
 
     # Proportion of the phones in the original word list that are part of an
@@ -161,18 +170,22 @@ module PhoneticAlign
 
     # This is the main loop of the analysis proceedure.
     def next_iteration
-      alignments = align_words
-      morpheme_hypotheses = hypothesize_morphemes(alignments)
+      morpheme_hypotheses = hypothesize_morphemes
       return [] if morpheme_hypotheses.empty?
       equivalence_classes = collect_morpheme_hypotheses(morpheme_hypotheses)
-      new_morphemes = scored_new_morphemes(equivalence_classes)
+      new_morphemes = equivalence_classes.new_morphemes
       insert_morphemes_into_analyses(new_morphemes)
+    end
+
+    # The alignments between all word pairs given the morphemes in this
+    # analysis.
+    def alignments
+      @alignment_table.indexes.keys
     end
 
     # Generate alignments for all the word pairs in the list that have
     # overlapping semantics.
-    def align_words
-      @alignments = {}
+    def align_all_words
       0.upto(word_list.length-1) do |i|
         0.upto(i-1) do |j|
           w1 = self[i]
@@ -182,16 +195,13 @@ module PhoneticAlign
                          "#{w1}\n#{w2}\nbecause they share no meaning")
             next
           end
-          @alignments[Alignment.new(w1, w2)] = [i,j]
+          @alignment_table.add(Alignment.new(w1, w2), i, j)
         end
       end
-      @alignments.keys
     end
 
     # Get morpheme hypotheses from the alignments.
-    #
-    # [_alignments_] sequence of Alignment objects
-    def hypothesize_morphemes(alignments)
+    def hypothesize_morphemes
       morpheme_hypotheses = []
       alignments.each do |alignment|
         LOGGER.debug("Compare\n" +
@@ -216,23 +226,6 @@ module PhoneticAlign
                                                @powerset_search_cutoff)
     end
 
-    # Return a list of the sets of equivalent morpheme hypotheses based on the
-    # sum of the match rates of the alignments in which they appear.
-    #
-    # [<em>equivalence_classes</em>] set of morpheme equivalence classes
-    def scored_new_morphemes(equivalence_classes)
-      new_morphemes = []
-      equivalence_classes.each_equivalence_class do |allomorphs, hyps|
-        morpheme = Morpheme.new(allomorphs, hyps.first.meaning)
-        score = match_rate_objective(hyps)
-        new_morphemes <<
-        Struct.new(:score,
-                   :morpheme,
-                   :morpheme_hypotheses).new(score, morpheme, hyps)
-      end
-      new_morphemes
-    end
-
     # Create a new copy of this analysis with the hypothesized morphemes
     # inserted.
     #
@@ -245,22 +238,14 @@ module PhoneticAlign
         analysis = self.deep_copy
         analysis.morphemes << morpheme
         analysis.reanalyze_words(morpheme_hypotheses)
-        analysis.score = m.score
         LOGGER.debug("New analysis\n#{analysis}")
         analysis
       end
     end
 
     # Rank morpheme hypothesis sets by the sum of their match rates.
-    def match_rate_objective(morpheme_hypotheses)
-      morpheme_hypotheses.inject(0) { |r, hyp| r += hyp.match_rate  }
-    end
-
-    # Rank morpheme hypothesis sets by the coverage they yield when inserted.
-    def coverage_objective(morpheme_hypotheses)
-      new_analysis = deep_copy
-      new_analysis.reanalyze_words(morpheme_hypotheses)
-      new_analysis.coverage
+    def match_rate_objective
+      alignments.inject(0) { |r, alignment| r += alignment.match_rate }
     end
 
     # Insert the specified morpheme hypotheses into the phonetic components of
@@ -277,6 +262,7 @@ module PhoneticAlign
       end
       # Insert the new morphemes into the phonetic components of the original
       # words.
+      changed_word_indexes = []
       word_table.each do |word, hyps|
         # Don't insert a morpheme at the same location more than once.
         hyps.uniq!
@@ -288,7 +274,7 @@ module PhoneticAlign
         # analysis' word list so that we may maintain multiple independent
         # analyses.
         hyps.each do |hyp|
-          source_index, dest_index = @alignments[hyp.alignment]
+          source_index, dest_index = @alignment_table.indexes[hyp.alignment]
           word_index = case hyp.word
           when :source
             source_index
@@ -302,7 +288,76 @@ module PhoneticAlign
           LOGGER.debug("Insert #{hyp.morpheme} into " +
                        "#{original_word.transcription}[#{from}..#{to}]")
           original_word.phonetic_component[from..to] = hyp.morpheme
+          changed_word_indexes << word_index
         end
+      end
+      # Delete alignments involving words that changed.
+      changed_word_indexes.each { |index| @alignment_table.delete(index) }
+      # Rerun alignments for the words that changed.
+      changed_word_indexes.each do |word_index|
+        # The alignments are done so that source words always have larger
+        # indexes than dest words.
+        0.upto(word_index - 1) do |dest_index|
+          source_word = self[word_index]
+          dest_word = self[dest_index]
+          alignment = Alignment.new(source_word, dest_word)
+          @alignment_table.add(alignment, word_index, dest_index)
+        end
+        (word_index + 1).upto(word_list.length - 1) do |source_index|
+          source_word = self[source_index]
+          dest_word = self[word_index]
+          alignment = Alignment.new(source_word, dest_word)
+          @alignment_table.add(alignment, source_index, word_index)
+        end
+      end
+    end
+
+  end
+
+
+  # Two-way lookup table of Alignment objects and their corresponding source
+  # and dest word index pairs.
+  class AlignmentTable
+    # Table of [source, dest] word index pairs by Alignment
+    attr_reader :indexes
+    # Table of Alignment objects by word index
+    attr_reader :alignments
+
+    def initialize
+      @indexes = {}
+      @alignments = {}
+    end
+
+    def to_s
+      (table_to_lines(alignments) + table_to_lines(indexes)).join("\n")
+    end
+
+    def inspect
+      "AlignmentTable: #{alignments.length} alignments, " +
+      "#{indexes.length} words"
+    end
+
+    # Add an Alignment and its word indexes to the table.
+    def add(alignment, source_index, dest_index)
+      @indexes[alignment] = [source_index, dest_index]
+      [source_index, dest_index].each do |index|
+        @alignments[index] = alignments.fetch(index, Set.new) << alignment
+      end
+    end
+
+    # Delete all the alignments involving the word with the specified index.
+    def delete(index)
+      @alignments.delete(index).each do |alignment|
+        @indexes.delete(alignment)
+      end
+    end
+
+    protected
+
+    def table_to_lines(table)
+      table.keys.sort.inject([]) do |lines, key|
+        lines << key.inspect
+        lines << table[key].sort.map { |value| value.inspect }.join(",")
       end
     end
 
@@ -335,8 +390,22 @@ module PhoneticAlign
       end.join("\n\n")
     end
 
+    # Return a list of the sets of equivalent morpheme hypotheses based on the
+    # sum of the match rates of the alignments in which they appear.
+    def new_morphemes
+      new_morphemes = []
+      each_equivalence_class do |allomorphs, hyps|
+        morpheme = Morpheme.new(allomorphs, hyps.first.meaning)
+        new_morphemes <<
+          Struct.new(:morpheme,
+                     :morpheme_hypotheses).new(morpheme, hyps)
+      end
+      new_morphemes
+    end
+
     # Enumerate over the equivalence classes created by partitioning.
     def each_equivalence_class
+      # TODO Make this the default each function of an Enumerable object?
       each do |allomorphs, semantic_equivalence_classes|
         semantic_equivalence_classes.each do |morpheme_hypotheses|
           yield [allomorphs, morpheme_hypotheses]
@@ -399,7 +468,7 @@ module PhoneticAlign
         # create a single semantic equivalence class.
         meaning = shared_meaning(hyps)
         self[allomorphs] = if not meaning.empty?
-          LOGGER.debug("Use shared meaning.")
+          LOGGER.debug("Use shared meaning #{meaning}.")
           [assign_meaning(hyps, meaning)]
         elsif self[allomorphs].length <= powerset_search_cutoff
           # If the hypothesis set for these allomorphs is small enough,
