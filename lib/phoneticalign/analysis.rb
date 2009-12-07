@@ -70,7 +70,7 @@ module PhoneticAlign
     attr_accessor :word_list
     # Discovered Morpheme objects
     attr_accessor :morphemes
-    attr_writer :score
+    attr_accessor :score
 
     attr_reader :alignment_table
 
@@ -90,6 +90,7 @@ module PhoneticAlign
       @initial_phones = phones_in_word_list
       @alignment_table = AlignmentTable.new
       align_all_words
+      @score = 0
     end
 
     # Sort from largest score to smallest.
@@ -140,14 +141,6 @@ module PhoneticAlign
       @word_list.inject(0) do |m, word|
         m += word.unanlayzed_phone_count
       end
-    end
-
-    def score
-      # Cache the score in case it is expensive to generate.
-      if @score.nil?
-        @score = match_rate_objective
-      end
-      @score
     end
 
     # Proportion of the phones in the original word list that are part of an
@@ -214,25 +207,30 @@ module PhoneticAlign
     #
     # [<em>new_morphemes</em>] new morpheme and morpheme hypotheses
     def insert_morphemes_into_analyses(new_morphemes)
+      # Enumerate over hypothesized new morphemes.
       new_morphemes.map do |m|
         morpheme = m.morpheme
         morpheme_hypotheses = m.morpheme_hypotheses
         LOGGER.debug("New morpheme: #{morpheme}")
+        # Create a copy of the current analysis.
         analysis = self.deep_copy
+        # Insert the new morphemes into the words.
         analysis.morphemes << morpheme
         analysis.reanalyze_words(morpheme_hypotheses)
+        # Calculate a score based on the match rate of the alignments used to
+        # propose these morphemes.
+        analysis.score = morpheme_hypotheses.inject(0) do |score, hyp|
+          score += hyp.match_rate
+        end
         LOGGER.debug("New analysis\n#{analysis}")
         analysis
       end
     end
 
-    # Rank morpheme hypothesis sets by the sum of their match rates.
-    def match_rate_objective
-      alignments.inject(0) { |r, alignment| r += alignment.match_rate }
-    end
-
     # Insert the specified morpheme hypotheses into the phonetic components of
     # their words.
+    #
+    # [<em>morpheme_hypotheses</em>] list of MorphemeHypothesis objects
     def reanalyze_words(morpheme_hypotheses)
       # Create a table of morpheme hypotheses indexed by word.
       word_table = {}
