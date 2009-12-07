@@ -472,12 +472,10 @@ module PhoneticAlign
     def to_s(segment_boundaries = [], emphasis = nil)
       # Create the source and destination lines.  Replace nils with '-' and
       # other objects with their transcriptions.
-      # TODO Do this more elegantly with case statement.
-      s_line = source_alignment.map {|s| s.nil? ? '-' : s}.map do |s|
-        s.respond_to?(:transcription) ? s.transcription : s.to_s
-      end
-      d_line = dest_alignment.map {|s| s.nil? ? '-' : s}.map do |s|
-        s.respond_to?(:transcription) ? s.transcription : s.to_s
+      s_line, d_line = [source_alignment, dest_alignment].map do |alignment|
+        alignment.map do |s|
+          s.nil? ? '-' : s.transcription
+        end
       end
       # Create short mnemonics for the edit operations.
       ops = edit_operations.map do |op|
