@@ -273,6 +273,7 @@ module PhoneticAlign
         end
       end
       # Delete alignments involving words that changed.
+      changed_word_indexes.uniq!
       changed_word_indexes.each { |index| @alignment_table.delete(index) }
       # Rerun alignments for the words that changed.
       changed_word_indexes.each do |word_index|
