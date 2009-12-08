@@ -11,7 +11,7 @@ module AnalyzeMorphemes
     # The default analysis parameters.
     default_parameters = {
                             :beam_width => 5,
-                            :powerset_search_cutoff => 5
+                            :powerset_search_cutoff => 0
                           }
     # Get parameters from the command line and configuration files.
     parser, parameters = get_parameters(default_parameters, arguments)
