@@ -1,3 +1,5 @@
+# From "Language Files" 10th Edition, page 187
+
 FORM,LEMMA,SUBJ PERSON,SUBJ NUMBER,OBJ PERSON,OBJ NUMBER,TENSE
 atanipenda,like,3rd,singular,1st,singular,future
 atakupenda,like,3rd,singular,2nd,singular,future
