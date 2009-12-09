@@ -164,6 +164,7 @@ module PhoneticAlign
     # This is the main loop of the analysis proceedure.
     def next_iteration
       morpheme_hypotheses = hypothesize_morphemes
+      morpheme_hypotheses = select_hypotheses(morpheme_hypotheses)
       return [] if morpheme_hypotheses.empty?
       equivalence_classes = collect_morpheme_hypotheses(morpheme_hypotheses)
       new_morphemes = equivalence_classes.new_morphemes
@@ -188,6 +189,23 @@ module PhoneticAlign
         segmentation.each_morpheme_hypothesis do |morpheme_hypothesis|
           LOGGER.debug("Morpheme Hypothesis\n#{morpheme_hypothesis}")
           morpheme_hypotheses << morpheme_hypothesis
+        end
+      end
+      morpheme_hypotheses
+    end
+
+    # Select which morpheme hypotheses to consider.
+    #
+    # First only consider hypotheses that come from phonetic differences, then
+    # ones that come from phonetic similaries, and finally ones that come from
+    # comparsion with the entire word.
+    def select_hypotheses(morpheme_hypotheses)
+      [DifferenceHypothesis, SimilarityHypothesis].each do |type|
+        selected = morpheme_hypotheses.find_all do |hyp|
+          hyp.instance_of?(type)
+        end
+        if not selected.empty?
+          return selected
         end
       end
       morpheme_hypotheses
