@@ -51,7 +51,7 @@ module PhoneticAlign
         end
       end
       # Keep the top @width beams active.
-      new_beam = new_beam.sort_by {|analysis| -analysis.score}
+      new_beam = new_beam.sort
       @beam = new_beam.uniq[0...@width]
     end
     
@@ -70,7 +70,9 @@ module PhoneticAlign
     attr_accessor :word_list
     # Discovered Morpheme objects
     attr_accessor :morphemes
-    attr_accessor :score
+    attr_accessor :morpheme_alignment_score
+    attr_writer :total_match_rate_memo, :morpheme_hypothesis_match_rate_memo
+    attr_writer :total_morpheme_match_rate_memo
 
     attr_reader :alignment_table
 
@@ -90,12 +92,23 @@ module PhoneticAlign
       @initial_phones = phones_in_word_list
       @alignment_table = AlignmentTable.new
       align_all_words
-      @score = 0
+      # Table of the sum of match rates for all the alignments that contribute
+      # to a given morpheme.
+      @morpheme_alignment_score = {}
     end
 
     # Sort from largest score to smallest.
     def <=>(other)
-      other.score <=> score
+      [
+        -phonetic_coverage,
+        morphemes.length,
+        -total_morpheme_match_rate
+      ] <=>
+      [
+        -other.phonetic_coverage,
+        other.morphemes.length,
+        -other.total_morpheme_match_rate
+      ]
     end
 
     def ==(other)
@@ -119,11 +132,17 @@ module PhoneticAlign
     # reanalyzed words.
     def to_s
       (
-        ["Score #{sprintf '%0.4f', score}: " +
-         "#{sprintf '%0.4f', phonetic_coverage} phonetic, " +
+        ["#{sprintf '%0.4f', phonetic_coverage} phonetic, " +
          "#{sprintf '%0.4f', semantic_coverage} semantic "] +
+        ["Total morpheme match rate " +
+         sprintf('%0.4f', total_morpheme_match_rate)] +
+        ["Hypothesis match rate " +
+         sprintf('%0.4f', morpheme_hypothesis_match_rate)] +
+        ["Total match rate #{sprintf('%0.4f', total_match_rate)}"] +
         ["Morphemes (#{morphemes.length})"] + ["-" * "Morphemes".length] +
-         morphemes.to_a.sort_by {|m| m.transcription} +
+         morphemes.to_a.sort_by {|m| -morpheme_alignment_score[m]}.map do |m|
+           "#{m} (#{sprintf '%0.4f', morpheme_alignment_score[m]})"
+         end +
          ["Word List"] + ["-" * "Word List".length] +
          word_list
        ).join("\n")
@@ -141,6 +160,29 @@ module PhoneticAlign
       @word_list.inject(0) do |m, word|
         m += word.unanlayzed_phone_count
       end
+    end
+
+    # The sum of the match rates of all the alignments in this analysis.
+    def total_match_rate
+      @total_match_rate_memo ||= alignments.inject(0) do |s, alignment|
+        s += alignment.match_rate
+      end
+    end
+
+    # The sum of the match rates of all the alignments in this analysis.
+    def total_morpheme_match_rate
+      @total_morpheme_match_rate_memo ||=
+      alignments.inject(0) do |s, alignment|
+        r = alignment.morpheme_match_rate
+        s += r.nil? ? 0 : r
+      end
+    end
+
+    # The sum of the match rates for all the alignments that contributed to
+    # the morphemes in this analysis.
+    def morpheme_hypothesis_match_rate
+      @morpheme_hypothesis_match_rate_memo ||=
+      morpheme_alignment_score.values.inject(0) { |s, r| s += r }
     end
 
     # Proportion of the phones in the original word list that are part of an
@@ -217,9 +259,14 @@ module PhoneticAlign
         # Insert the new morphemes into the words.
         analysis.morphemes << morpheme
         analysis.reanalyze_words(morpheme_hypotheses)
+        # Remove all the memoized scores.
+        analysis.total_match_rate_memo = nil
+        analysis.morpheme_hypothesis_match_rate_memo = nil
+        analysis.total_morpheme_match_rate_memo = nil
         # Calculate a score based on the match rate of the alignments used to
         # propose these morphemes.
-        analysis.score = morpheme_hypotheses.inject(0) do |score, hyp|
+        analysis.morpheme_alignment_score[morpheme] =
+        morpheme_hypotheses.inject(0) do |score, hyp|
           score += hyp.match_rate
         end
         LOGGER.debug("New analysis\n#{analysis}")
@@ -277,7 +324,7 @@ module PhoneticAlign
       changed_word_indexes.each { |index| @alignment_table.delete(index) }
       # Rerun alignments for the words that changed.
       changed_word_indexes.each do |word_index|
-        # The alignments are done so that source words always have larger
+        # Alignments are performed so that source words always have larger
         # indexes than dest words.
         0.upto(word_index - 1) do |dest_index|
           source_word = self[word_index]

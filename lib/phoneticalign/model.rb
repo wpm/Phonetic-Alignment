@@ -574,6 +574,25 @@ module PhoneticAlign
       match/ops.length.to_f
     end
 
+    # The morpheme match is a number from 0 to 1 that measures the similarity
+    # of the morphemes in the two words.
+    #
+    # This is the fraction of aligned morpheme slots over the total number of
+    # slots containing morphemes in either the source or the dest.  If there
+    # are no morphemes in this alignment, the function returns nil.
+    def morpheme_match_rate
+      slot = 0
+      match = 0
+      edit_operations.each_with_index do |op, i|
+        if source_alignment[i].kind_of?(SurfaceMorpheme) or
+           dest_alignment[i].kind_of?(SurfaceMorpheme)
+           slot += 1
+           match +=1 if op.nil?
+        end
+      end
+      slot.zero? ? nil : match/slot.to_f
+    end
+
     # Divide the alignment into segments
     #
     # This returns a Segmentation for this alignment.
@@ -586,6 +605,7 @@ module PhoneticAlign
     end
 
   end
+
 
   # The result of performing an alignment between two Word objects.
   class AlignmentResult < EditAlign::Alignment
@@ -629,6 +649,7 @@ module PhoneticAlign
     end
     
   end
+
 
   # A division of an Alignment into contiguous segments.
   class Segmentation
